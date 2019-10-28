@@ -1,0 +1,6 @@
+[submodule "docs"]
+	path = docs
+	url = git@github.com:buildlyio/docs.git
+[submodule "django-service-wizard"]
+	path = django-service-wizard
+	url = git@github.com:buildlyio/django-service-wizard.git
