@@ -65,11 +65,36 @@ read service_answer
 if [ "$service_answer" != "${service_answer#[Yy]}" ] ;then
   cd django-service-wizard
   # create a new service use django-service-wizard for now
-  docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code
+  docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
 fi
 
 cd ../YourApplication
 
 echo "Buildly services cloned and ready for configuration"
 
-ls -l
+echo -n "Now... would you like to connect your services to docker and a minikube instance? Yes [Y/y] or No [N/n]"
+read mini_kube
+
+if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
+  git clone https://github.com/buildlyio/helm-charts.git
+  kubectl config use-context minikube
+  kubectl config set-cluster minikube
+  kubectl create namespace buildly || echo "Name space buildly already exists"
+  echo "Configure your buildly core to connect to a Database..."
+  echo -n "Enter host name or IP:"
+  read dbhost
+  echo -n "Enter Database Port:"
+  read dbport
+  echo -n "Enter Database Username:"
+  read dbuser
+  echo -n "Enter Database Password:"
+  read dbpass
+
+  helm init
+
+  helm install . --name buildly-core --namespace buildly \
+  --set configmap.data.DATABASE_HOST=$dbhost \
+  --set configmap.data.DATABASE_PORT=$dbport \
+  --set secret.data.DATABASE_USER=$dbuser \
+  --set secret.data.DATABASE_PASSWORD=$dbpass
+fi
