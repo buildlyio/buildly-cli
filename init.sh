@@ -76,7 +76,11 @@ echo -n "Now... would you like to connect your services to docker and a minikube
 read mini_kube
 
 if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
+  # start mini kube if not already
+  minikube start
+  # clone the helm chart to deploy core to minikube
   git clone https://github.com/buildlyio/helm-charts.git
+  # setup kubectl context and configure to use minikube and buildly
   kubectl config use-context minikube
   kubectl config set-cluster minikube
   kubectl create namespace buildly || echo "Name space buildly already exists"
@@ -89,12 +93,29 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   read dbuser
   echo -n "Enter Database Password:"
   read dbpass
-
+  # start helm
   helm init
-
+  # install to minikube via hlem
   helm install . --name buildly-core --namespace buildly \
   --set configmap.data.DATABASE_HOST=$dbhost \
   --set configmap.data.DATABASE_PORT=$dbport \
   --set secret.data.DATABASE_USER=$dbuser \
   --set secret.data.DATABASE_PASSWORD=$dbpass
+
+  # build local images for each service
+  cd YourApplication/services
+  for service in ls
+    cd $service
+    # build a local image
+    docker-compose build -t $service:0.0.1 .
+    # deploy to kubectl
+    kubectl -namespace buildly run $service --image=$service:0.0.1 --image-pull-policy=Never
+    cd ../
+  done
+
+  # check on pods
+  kubect get pods
+
+  echo "Done!  Check you configuration and pods running your minikube and start coding!"
+  echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
 fi
