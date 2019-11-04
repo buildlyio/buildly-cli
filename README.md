@@ -2,10 +2,10 @@
 
 Command line tool for creating and configuring your buildly application.
 
-This repository has links to subrepos.  To pull the latest changes from the subrepos use
-'''
-git pull --recurse-submodules
-'''
+This repository has links to submodules.  To pull the latest changes from the submodules use:
+`git pull --recurse-submodules`
+To commit changes use:
+`git commit -am 'added DbConnector module`
 
 ## Getting Started
 
