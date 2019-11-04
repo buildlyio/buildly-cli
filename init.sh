@@ -107,14 +107,14 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   for service in ls
     cd $service
     # build a local image
-    docker-compose build -t $service:0.0.1 .
+    docker-compose build $service
     # deploy to kubectl
-    kubectl -namespace buildly run $service --image=$service:0.0.1 --image-pull-policy=Never
+    kubectl run $service --image=$service --image-pull-policy=Never -n buildly
     cd ../
   done
 
   # check on pods
-  kubect get pods
+  kubect get pods -n buildly
 
   echo "Done!  Check you configuration and pods running your minikube and start coding!"
   echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
