@@ -197,3 +197,4 @@ if [ "$provider" != "${provider#[Yy]}" ] ;then
     kubect get pods -n buildly
 
   fi
+fi
