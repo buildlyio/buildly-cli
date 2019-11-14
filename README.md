@@ -5,7 +5,7 @@ Command line tool for creating and configuring your buildly application.
 This repository has links to submodules.  To pull the latest changes from the submodules use:
 >`git pull --recurse-submodules`
 To commit changes use:
->`git commit -am 'added DbConnector module`
+>`git commit -am 'added module`
 
 ## Getting Started
 
@@ -24,7 +24,6 @@ No tests yet (Coming soon)
 ## Deployment
 
 When finished the CLI will prompt you for a GitHub repository to commit your new application to, as well as give you instructions on how to push your newly created Docker image to a registry.
-
 
 
 ## Contributing
