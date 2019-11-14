@@ -6,7 +6,7 @@ read answer
 
 if [ "$answer" != "${answer#[Ss]}" ] ;then
     echo "Cloning Buildly Core"
-    git clone git@github.com:buildlyio/buildly-core.git
+    git clone https://github.com/buildlyio/buildly-core.git
 
     echo -n "Would you like to Manage Users with Buildly? Yes [Y/y] or No [N/n]"
     read users
@@ -63,6 +63,7 @@ echo -n "Now... would you like to create a new service from scratch? Yes [Y/y] o
 read service_answer
 
 if [ "$service_answer" != "${service_answer#[Yy]}" ] ;then
+  
   cd django-service-wizard
   # create a new service use django-service-wizard for now
   docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
