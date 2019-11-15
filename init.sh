@@ -119,7 +119,7 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   done
 
   # check on pods
-  kubect get pods -n buildly
+  kubectl get pods -n buildly
 
   echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
   echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
@@ -197,7 +197,7 @@ if [ "$provider" != "${provider#[Yy]}" ] ;then
     done
 
     # check on pods
-    kubect get pods -n buildly
+    kubectl get pods -n buildly
 
   fi
 fi
