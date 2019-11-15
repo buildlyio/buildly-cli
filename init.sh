@@ -95,6 +95,8 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   echo -n "Enter Database Password:"
   read dbpass
   # start helm
+  (
+  cd "helm-charts/buildly-core-chart" || exit
   helm init
   # install to minikube via hlem
   helm install . --name buildly-core --namespace buildly \
@@ -102,6 +104,7 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   --set configmap.data.DATABASE_PORT=$dbport \
   --set secret.data.DATABASE_USER=$dbuser \
   --set secret.data.DATABASE_PASSWORD=$dbpass
+  )
 
   # build local images for each service
   cd YourApplication/services
