@@ -2,3 +2,4 @@ YourApplication
 .DS_store
 .idea
 buildly_core
+helm-charts

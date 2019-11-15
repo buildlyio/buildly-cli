@@ -95,6 +95,8 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   echo -n "Enter Database Password:"
   read dbpass
   # start helm
+  (
+  cd "helm-charts/buildly-core-chart" || exit
   helm init
   # install to minikube via hlem
   helm install . --name buildly-core --namespace buildly \
@@ -102,6 +104,7 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   --set configmap.data.DATABASE_PORT=$dbport \
   --set secret.data.DATABASE_USER=$dbuser \
   --set secret.data.DATABASE_PASSWORD=$dbpass
+  )
 
   # build local images for each service
   cd YourApplication/services
@@ -116,7 +119,7 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   done
 
   # check on pods
-  kubect get pods -n buildly
+  kubectl get pods -n buildly
 
   echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
   echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
@@ -194,7 +197,7 @@ if [ "$provider" != "${provider#[Yy]}" ] ;then
     done
 
     # check on pods
-    kubect get pods -n buildly
+    kubectl get pods -n buildly
 
   fi
 fi
