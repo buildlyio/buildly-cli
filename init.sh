@@ -26,6 +26,12 @@ setupHelm()
   fi
 }
 
+##############################################################################
+#
+# Main
+#
+##############################################################################
+
 # init
 figlet buildly
 echo -n "Buildy Core configuratioin tool, what type of app are building? [F/f] Fast and lightweight or [S/s] Scaleable and feature rich?"
@@ -71,17 +77,15 @@ read service_answer2
 
 if [ "$service_answer2" != "${service_answer2#[Yy]}" ] ;then
   # list marketplace open source repost
-  curl -s https://api.github.com/orgs/Buildly-Marketplace/repos?per_page=1000 | grep git_url |awk '{print $2}'| sed 's/"\(.*\)",/\1/'
-
-  # clone all repositories
-  for repo in `curl -s https://api.github.com/orgs/Buildly-Marketplace/repos?per_page=1000 |grep git_url |awk '{print $2}'| sed 's/"\(.*\)",/\1/'`;do
-    remove="git://github.com/Buildly-Marketplace/"
+  # clone selected repositories
+  for repo in `curl -s https://api.github.com/orgs/Buildly-Marketplace/repos?per_page=1000 | grep full_name | awk '{print $2}'| sed 's/"\(.*\)",/\1/'`;do
+    remove="Buildly-Marketplace/"
     name=${repo//$remove/}
     echo -n "Would you like to clone and use " $name " from the marketplace? Yes [Y/y] or No [N/n]"
     read service_answer3
 
     if [ "$service_answer3" != "${service_answer3#[Yy]}" ] ;then
-      git clone $repo YourApplication/services/$name;
+      git clone "https://github.com/$repo.git" "YourApplication/services/$name";
     fi
   done;
 fi
