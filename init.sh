@@ -1,4 +1,55 @@
 #!/bin/bash
+
+###############################################################################
+#
+# Global variables
+#
+###############################################################################
+
+github_url="https://github.com"
+github_api_url="https://api.github.com"
+buildly_core_repo_path="buildlyio/buildly-core.git"
+buildly_helm_repo_path="buildlyio/helm-charts.git"
+buildly_mkt_path="Buildly-Marketplace"
+
+###############################################################################
+#
+# Global Functions
+#
+###############################################################################
+
+# method responsible for starting a minikube instance
+setupMinikube()
+{
+  status=$(minikube status)
+  if [[ ! ( $status == *"host: Running"*  &&  $status == *"kubelet: Running"* &&  $status == *"apiserver: Running"* \
+  &&  $status == *"kubeconfig: Configured"*) ]]; then
+    minikube start
+  else
+    echo "The current Minikube instance will be used"
+  fi
+
+  kubectl config use-context minikube
+  kubectl config set-cluster minikube
+}
+
+# method responsible for initializing helm
+setupHelm()
+{
+  status=$(helm version)
+  if [[ ! ( $status == *"Client: &version.Version"*  &&  $status == *"Server: &version.Version"*) ]]; then
+    helm init
+  else
+    echo "Helm is already configured"
+  fi
+}
+
+##############################################################################
+#
+# Main
+#
+##############################################################################
+
 # init
 figlet buildly
 echo -n "Buildy Core configuratioin tool, what type of app are building? [F/f] Fast and lightweight or [S/s] Scaleable and feature rich?"
@@ -6,7 +57,7 @@ read answer
 
 if [ "$answer" != "${answer#[Ss]}" ] ;then
     echo "Cloning Buildly Core"
-    git clone https://github.com/buildlyio/buildly-core.git
+    git clone $github_url/$buildly_core_repo_path
 
     echo -n "Would you like to Manage Users with Buildly? Yes [Y/y] or No [N/n]"
     read users
@@ -44,17 +95,15 @@ read service_answer2
 
 if [ "$service_answer2" != "${service_answer2#[Yy]}" ] ;then
   # list marketplace open source repost
-  curl -s https://api.github.com/orgs/Buildly-Marketplace/repos?per_page=1000 | grep git_url |awk '{print $2}'| sed 's/"\(.*\)",/\1/'
-
   # clone all repositories
-  for repo in `curl -s https://api.github.com/orgs/Buildly-Marketplace/repos?per_page=1000 |grep git_url |awk '{print $2}'| sed 's/"\(.*\)",/\1/'`;do
-    remove="git://github.com/Buildly-Marketplace/"
+  for repo in `curl -s $github_api_url/orgs/$buildly_mkt_path/repos?per_page=1000 | grep full_name | awk '{print $2}'| sed 's/"\(.*\)",/\1/'`;do
+    remove="$buildly_mkt_path/"
     name=${repo//$remove/}
     echo -n "Would you like to clone and use " $name " from the marketplace? Yes [Y/y] or No [N/n]"
     read service_answer3
 
     if [ "$service_answer3" != "${service_answer3#[Yy]}" ] ;then
-      git clone $repo YourApplication/services/$name;
+      git clone "$github_url/$repo.git" "YourApplication/services/$name";
     fi
   done;
 fi
@@ -63,13 +112,12 @@ echo -n "Now... would you like to create a new service from scratch? Yes [Y/y] o
 read service_answer
 
 if [ "$service_answer" != "${service_answer#[Yy]}" ] ;then
-  
-  cd django-service-wizard
+  (
+  cd "django-service-wizard" || exit
   # create a new service use django-service-wizard for now
   docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
+  )
 fi
-
-cd ../YourApplication
 
 echo "Buildly services cloned and ready for configuration"
 
@@ -78,12 +126,12 @@ read mini_kube
 
 if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   # start mini kube if not already
-  minikube start
+  setupMinikube
   # clone the helm chart to deploy core to minikube
-  git clone https://github.com/buildlyio/helm-charts.git
-  # setup kubectl context and configure to use minikube and buildly
-  kubectl config use-context minikube
-  kubectl config set-cluster minikube
+  if [ ! -d helm-charts/ ]; then
+    git clone $github_url/$buildly_helm_repo_path
+  fi
+  # create buildly namespace
   kubectl create namespace buildly || echo "Name space buildly already exists"
   echo "Configure your buildly core to connect to a Database..."
   echo -n "Enter host name or IP:"
@@ -96,30 +144,32 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   read dbpass
   # start helm
   (
+  setupHelm
   cd "helm-charts/buildly-core-chart" || exit
-  helm init
-  # install to minikube via hlem
+  # install to minikube via helm
   helm install . --name buildly-core --namespace buildly \
   --set configmap.data.DATABASE_HOST=$dbhost \
-  --set configmap.data.DATABASE_PORT=$dbport \
+  --set configmap.data.DATABASE_PORT=\"$dbport\" \
   --set secret.data.DATABASE_USER=$dbuser \
   --set secret.data.DATABASE_PASSWORD=$dbpass
   )
 
   # build local images for each service
-  cd YourApplication/services
-  for service in ls
+  (
+  cd "YourApplication/services" || exit
+  eval $(minikube docker-env)
+  ls | while IFS= read -r service
   do
-    cd $service
+    (
+    cd $service || exit
+    cleanedService=$(echo "$service" | tr "[:punct:]" -)
     # build a local image
-    docker-compose build $service
+    docker build . -t "${cleanedService}:latest"
     # deploy to kubectl
-    kubectl run $service --image=$service --image-pull-policy=Never -n buildly
-    cd ../
+    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
+    )
   done
-
-  # check on pods
-  kubectl get pods -n buildly
+  )
 
   echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
   echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
@@ -146,7 +196,7 @@ if [ "$provider" != "${provider#[Yy]}" ] ;then
   if [ "$provider_name_do" != "${provider_name_do#[Yy]}" ] ;then
     echo "Digital OCean hosted Kubernetes... ok let's go!"
     # clone the helm chart to deploy core to minikube
-    git clone https://github.com/buildlyio/helm-charts.git
+    git clone $github_url/$buildly_helm_repo_path
 
     echo "Let's make sure you have your DO configs ready..."
     # auth to DO
