@@ -90,13 +90,12 @@ echo -n "Now... would you like to create a new service from scratch? Yes [Y/y] o
 read service_answer
 
 if [ "$service_answer" != "${service_answer#[Yy]}" ] ;then
-  
-  cd django-service-wizard
+  (
+  cd "django-service-wizard" || exit
   # create a new service use django-service-wizard for now
   docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
+  )
 fi
-
-cd ../YourApplication
 
 echo "Buildly services cloned and ready for configuration"
 
