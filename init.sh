@@ -15,6 +15,17 @@ setupMinikube()
   kubectl config set-cluster minikube
 }
 
+# method responsible for initializing helm
+setupHelm()
+{
+  status=$(helm version)
+  if [[ ! ( $status == *"Client: &version.Version"*  &&  $status == *"Server: &version.Version"*) ]]; then
+    helm init
+  else
+    echo "Helm is already configured"
+  fi
+}
+
 # init
 figlet buildly
 echo -n "Buildy Core configuratioin tool, what type of app are building? [F/f] Fast and lightweight or [S/s] Scaleable and feature rich?"
@@ -110,12 +121,12 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   read dbpass
   # start helm
   (
+  setupHelm
   cd "helm-charts/buildly-core-chart" || exit
-  helm init
-  # install to minikube via hlem
+  # install to minikube via helm
   helm install . --name buildly-core --namespace buildly \
   --set configmap.data.DATABASE_HOST=$dbhost \
-  --set configmap.data.DATABASE_PORT=$dbport \
+  --set configmap.data.DATABASE_PORT=\"$dbport\" \
   --set secret.data.DATABASE_USER=$dbuser \
   --set secret.data.DATABASE_PASSWORD=$dbpass
   )
