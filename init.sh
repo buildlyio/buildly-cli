@@ -1,4 +1,20 @@
 #!/bin/bash
+
+# method responsible for starting a minikube instance
+setupMinikube()
+{
+  status=$(minikube status)
+  if [[ ! ( $status == *"host: Running"*  &&  $status == *"kubelet: Running"* &&  $status == *"apiserver: Running"* \
+  &&  $status == *"kubeconfig: Configured"*) ]]; then
+    minikube start
+  else
+    echo "The current Minikube instance will be used"
+  fi
+
+  kubectl config use-context minikube
+  kubectl config set-cluster minikube
+}
+
 # init
 figlet buildly
 echo -n "Buildy Core configuratioin tool, what type of app are building? [F/f] Fast and lightweight or [S/s] Scaleable and feature rich?"
@@ -78,12 +94,10 @@ read mini_kube
 
 if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   # start mini kube if not already
-  minikube start
+  setupMinikube
   # clone the helm chart to deploy core to minikube
   git clone https://github.com/buildlyio/helm-charts.git
-  # setup kubectl context and configure to use minikube and buildly
-  kubectl config use-context minikube
-  kubectl config set-cluster minikube
+  # create buildly namespace
   kubectl create namespace buildly || echo "Name space buildly already exists"
   echo "Configure your buildly core to connect to a Database..."
   echo -n "Enter host name or IP:"
