@@ -135,19 +135,21 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   )
 
   # build local images for each service
-  cd YourApplication/services
-  for service in ls
+  (
+  cd "YourApplication/services" || exit
+  eval $(minikube docker-env)
+  ls | while IFS= read -r service
   do
-    cd $service
+    (
+    cd $service || exit
+    cleanedService=$(echo "$service" | tr "[:punct:]" -)
     # build a local image
-    docker-compose build $service
+    docker build . -t "${cleanedService}:latest"
     # deploy to kubectl
-    kubectl run $service --image=$service --image-pull-policy=Never -n buildly
-    cd ../
+    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
+    )
   done
-
-  # check on pods
-  kubectl get pods -n buildly
+  )
 
   echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
   echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
