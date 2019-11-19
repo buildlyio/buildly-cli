@@ -1,5 +1,23 @@
 #!/bin/bash
 
+###############################################################################
+#
+# Global variables
+#
+###############################################################################
+
+github_url="https://github.com"
+github_api_url="https://api.github.com"
+buildly_core_repo_path="buildlyio/buildly-core.git"
+buildly_helm_repo_path="buildlyio/helm-charts.git"
+buildly_mkt_path="Buildly-Marketplace"
+
+###############################################################################
+#
+# Global Functions
+#
+###############################################################################
+
 # method responsible for starting a minikube instance
 setupMinikube()
 {
@@ -39,7 +57,7 @@ read answer
 
 if [ "$answer" != "${answer#[Ss]}" ] ;then
     echo "Cloning Buildly Core"
-    git clone https://github.com/buildlyio/buildly-core.git
+    git clone $github_url/$buildly_core_repo_path
 
     echo -n "Would you like to Manage Users with Buildly? Yes [Y/y] or No [N/n]"
     read users
@@ -77,15 +95,15 @@ read service_answer2
 
 if [ "$service_answer2" != "${service_answer2#[Yy]}" ] ;then
   # list marketplace open source repost
-  # clone selected repositories
-  for repo in `curl -s https://api.github.com/orgs/Buildly-Marketplace/repos?per_page=1000 | grep full_name | awk '{print $2}'| sed 's/"\(.*\)",/\1/'`;do
-    remove="Buildly-Marketplace/"
+  # clone all repositories
+  for repo in `curl -s $github_api_url/orgs/$buildly_mkt_path/repos?per_page=1000 | grep full_name | awk '{print $2}'| sed 's/"\(.*\)",/\1/'`;do
+    remove="$buildly_mkt_path/"
     name=${repo//$remove/}
     echo -n "Would you like to clone and use " $name " from the marketplace? Yes [Y/y] or No [N/n]"
     read service_answer3
 
     if [ "$service_answer3" != "${service_answer3#[Yy]}" ] ;then
-      git clone "https://github.com/$repo.git" "YourApplication/services/$name";
+      git clone "$github_url/$repo.git" "YourApplication/services/$name";
     fi
   done;
 fi
@@ -110,7 +128,7 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   # start mini kube if not already
   setupMinikube
   # clone the helm chart to deploy core to minikube
-  git clone https://github.com/buildlyio/helm-charts.git
+  git clone $github_url/$buildly_helm_repo_path
   # create buildly namespace
   kubectl create namespace buildly || echo "Name space buildly already exists"
   echo "Configure your buildly core to connect to a Database..."
@@ -176,7 +194,7 @@ if [ "$provider" != "${provider#[Yy]}" ] ;then
   if [ "$provider_name_do" != "${provider_name_do#[Yy]}" ] ;then
     echo "Digital OCean hosted Kubernetes... ok let's go!"
     # clone the helm chart to deploy core to minikube
-    git clone https://github.com/buildlyio/helm-charts.git
+    git clone $github_url/$buildly_helm_repo_path
 
     echo "Let's make sure you have your DO configs ready..."
     # auth to DO
