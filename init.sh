@@ -128,7 +128,9 @@ if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
   # start mini kube if not already
   setupMinikube
   # clone the helm chart to deploy core to minikube
-  git clone $github_url/$buildly_helm_repo_path
+  if [ ! -d helm-charts/ ]; then
+    git clone $github_url/$buildly_helm_repo_path
+  fi
   # create buildly namespace
   kubectl create namespace buildly || echo "Name space buildly already exists"
   echo "Configure your buildly core to connect to a Database..."
