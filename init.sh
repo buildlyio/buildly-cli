@@ -55,22 +55,17 @@ setupHelm()
   fi
 }
 
-##############################################################################
-#
-# Main
-#
-##############################################################################
+# method to clone buidly into the application folder
+setupBuildlyCore()
+{
+  echo -n "Buildy Core configuration tool, what type of app are building? [F/f] Fast and lightweight or [S/s] Scaleable and feature rich? "
+  read answer
 
-# init
-figlet buildly
-echo -n "Buildy Core configuratioin tool, what type of app are building? [F/f] Fast and lightweight or [S/s] Scaleable and feature rich?"
-read answer
-
-if [ "$answer" != "${answer#[Ss]}" ] ;then
+  if [ "$answer" != "${answer#[Ss]}" ] ;then
     echo "Cloning Buildly Core"
-    git clone $github_url/$buildly_core_repo_path
+    git clone "$github_url/$buildly_core_repo_path" "buildly-core"
 
-    echo -n "Would you like to Manage Users with Buildly? Yes [Y/y] or No [N/n]"
+    echo -n "Would you like to Manage Users with Buildly? Yes [Y/y] or No [N/n] "
     read users
 
     # cp config file to make changes
@@ -82,24 +77,52 @@ if [ "$answer" != "${answer#[Ss]}" ] ;then
         sed 's/users//g' buildly-core/buildly/settings/base-buildly.py > buildly-core/buildly/settings/base-buildly.py
     fi
 
-    echo -n "Would you like to use Templates to manage reuseable workflows with Buildly? Yes [Y/y] or No [N/n]"
+    echo -n "Would you like to use Templates to manage reuseable workflows with Buildly? Yes [Y/y] or No [N/n] "
     read templates
 
     if [ "$templates" != "${templates#[Nn]}" ] ;then
         sed 's/workflow//g' buildly-core/buildly/settings/base-buildly.py > buildly-core/buildly/settings/base-buildly.py
     fi
-    echo -n "Would you like to enable the data mesh functions? Yes [Y/y] or No [N/n]"
+    echo -n "Would you like to enable the data mesh functions? Yes [Y/y] or No [N/n] "
     read mesh
 
     if [ "$mesh" != "${mesh#[Nn]}" ] ;then
         sed 's/datamesh//g' buildly-core/buildly/settings/base-buildly.py > buildly-core/buildly/settings/base-buildly.py
     fi
-fi
+  fi
+}
 
-# set up application and services
-mkdir YourApplication
-mv buildly-core YourApplication/
-mkdir YourApplication/services
+# method to create new applications
+createApplication()
+{
+  # create application and services folder
+  if [ -d YourApplication/ ]; then
+    echo -n "A folder called YourApplication already exists. Do you want to delete it and recreate? Yes [Y/y] or No [N/n] "
+    read folder_answer
+    if [ "$folder_answer" != "${folder_answer#[Yy]}" ] ;then
+      sudo rm -r YourApplication
+    else
+      exit
+    fi
+  fi
+  mkdir "YourApplication"
+  mkdir "YourApplication/services"
+
+  # set up application and services
+  (
+  cd YourApplication || exit
+  setupBuildlyCore
+  )
+}
+
+##############################################################################
+#
+# Main
+#
+##############################################################################
+
+# init
+createApplication
 
 echo -n "Would you like to import a service from the marketplace? Yes [Y/y] or No [N/n]"
 read service_answer2
