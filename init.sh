@@ -152,8 +152,13 @@ cloneMktpService()
 # method to create django services from scratch using django wizard
 createDjangoService()
 {
+  if [ ! -d django-service-wizard ]; then
+    MSG="The Django service wizard \"django-service-wizard\" wasn't found"
+    print_message "error" "$MSG"
+  fi
+
   (
-  cd "django-service-wizard" || exit
+  cd "django-service-wizard" || return
   # create a new service use django-service-wizard for now
   docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
   )
@@ -169,7 +174,10 @@ createApplication()
     if [ "$folder_answer" != "${folder_answer#[Yy]}" ] ;then
       sudo rm -r YourApplication
     else
-      exit
+      MSG="You can either rename the folder \"YourApplication\" to another name or add more services to
+      the current application using the commands --create-service, --clone-markeplace"
+      print_message "info" "$MSG"
+      exit 0
     fi
   fi
   mkdir "YourApplication"
@@ -236,7 +244,7 @@ deploy2Minikube()
     git clone $github_url/$buildly_helm_repo_path
   fi
   # create buildly namespace
-  kubectl create namespace buildly || echo "Name space buildly already exists"
+  kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
   echo "Configure your buildly core to connect to a Database..."
   echo -n "Enter host name or IP: "
   read dbhost
@@ -246,10 +254,15 @@ deploy2Minikube()
   read dbuser
   echo -n "Enter Database Password: "
   read dbpass
+
   # start helm
+  if [ ! -d helm-charts/buildly-core-chart ]; then
+    MSG="The Buildly Core Helm chart \"helm-charts/buildly-core-chart\" wasn't found"
+    print_message "error" "$MSG"
+  fi
   (
   setupHelm
-  cd "helm-charts/buildly-core-chart" || exit
+  cd "helm-charts/buildly-core-chart" || return
   # install to minikube via helm
   helm install . --name buildly-core --namespace buildly \
   --set configmap.data.DATABASE_HOST=$dbhost \
@@ -259,8 +272,12 @@ deploy2Minikube()
   )
 
   # build local images for each service
+  if [ ! -d YourApplication/services ]; then
+    MSG="The application folder \"YourApplication/services\" doesn't exist"
+    print_message "error" "$MSG"
+  fi
   (
-  cd "YourApplication/services" || exit
+  cd "YourApplication/services" || return
   eval $(minikube docker-env)
   ls | while IFS= read -r service
   do
@@ -268,7 +285,7 @@ deploy2Minikube()
     cd $service || exit
     cleanedService=$(echo "$service" | tr "[:punct:]" -)
     # build a local image
-    docker build . -t "${cleanedService}:latest"
+    docker build . -t "${cleanedService}:latest" || exit
     # deploy to kubectl
     kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
     )
@@ -348,6 +365,22 @@ deploy2Provider()
     # check on pods
     kubectl get pods -n buildly
 
+  fi
+}
+
+##############################################################################
+#
+# Print Messages
+#
+##############################################################################
+print_message() {
+  if [ "$1" == "info" ] ;then
+    echo -e "${BLUE}INFO: $2${OFF}"
+  elif [ "$1" == "warn" ]; then
+    echo -e "${YELLOW}WARN: $2${OFF}"
+  else
+    echo -e "${RED}ERROR: $2${OFF}"
+    exit 1
   fi
 }
 
