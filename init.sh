@@ -1,5 +1,16 @@
 #!/bin/bash
 
+#
+# This is a Buildly CLI tool to be used with Buildly Core.
+#
+# LICENSE:
+#
+#
+# CONTACT:
+# website: https://buildly.io
+# email: team@buildly.io
+#
+
 ###############################################################################
 #
 # Global variables
