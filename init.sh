@@ -1,5 +1,16 @@
 #!/bin/bash
 
+#
+# This is a Buildly CLI tool to be used with Buildly Core.
+#
+# LICENSE:
+#
+#
+# CONTACT:
+# website: https://buildly.io
+# email: team@buildly.io
+#
+
 ###############################################################################
 #
 # Global variables
@@ -44,22 +55,17 @@ setupHelm()
   fi
 }
 
-##############################################################################
-#
-# Main
-#
-##############################################################################
+# method to clone buidly into the application folder
+setupBuildlyCore()
+{
+  echo -n "Buildy Core configuration tool, what type of app are building? [F/f] Fast and lightweight or [S/s] Scaleable and feature rich? "
+  read answer
 
-# init
-figlet buildly
-echo -n "Buildy Core configuratioin tool, what type of app are building? [F/f] Fast and lightweight or [S/s] Scaleable and feature rich?"
-read answer
-
-if [ "$answer" != "${answer#[Ss]}" ] ;then
+  if [ "$answer" != "${answer#[Ss]}" ] ;then
     echo "Cloning Buildly Core"
-    git clone $github_url/$buildly_core_repo_path
+    git clone "$github_url/$buildly_core_repo_path" "buildly-core"
 
-    echo -n "Would you like to Manage Users with Buildly? Yes [Y/y] or No [N/n]"
+    echo -n "Would you like to Manage Users with Buildly? Yes [Y/y] or No [N/n] "
     read users
 
     # cp config file to make changes
@@ -71,183 +77,240 @@ if [ "$answer" != "${answer#[Ss]}" ] ;then
         sed 's/users//g' buildly-core/buildly/settings/base-buildly.py > buildly-core/buildly/settings/base-buildly.py
     fi
 
-    echo -n "Would you like to use Templates to manage reuseable workflows with Buildly? Yes [Y/y] or No [N/n]"
+    echo -n "Would you like to use Templates to manage reuseable workflows with Buildly? Yes [Y/y] or No [N/n] "
     read templates
 
     if [ "$templates" != "${templates#[Nn]}" ] ;then
         sed 's/workflow//g' buildly-core/buildly/settings/base-buildly.py > buildly-core/buildly/settings/base-buildly.py
     fi
-    echo -n "Would you like to enable the data mesh functions? Yes [Y/y] or No [N/n]"
+    echo -n "Would you like to enable the data mesh functions? Yes [Y/y] or No [N/n] "
     read mesh
 
     if [ "$mesh" != "${mesh#[Nn]}" ] ;then
         sed 's/datamesh//g' buildly-core/buildly/settings/base-buildly.py > buildly-core/buildly/settings/base-buildly.py
     fi
-fi
+  fi
+}
 
-# set up application and services
-mkdir YourApplication
-mv buildly-core YourApplication/
-mkdir YourApplication/services
+# method to list services availables on Buildly Marketplace
+listMktpServices()
+{
+  services=$(curl -s $github_api_url/orgs/$buildly_mkt_path/repos?per_page=1000 | grep full_name | awk '{print $2}'| sed 's/.*\/\(.*\)",/\1/')
+  echo "$services"
+}
 
-echo -n "Would you like to import a service from the marketplace? Yes [Y/y] or No [N/n]"
-read service_answer2
+# method to clone services from Buildly Marketplace
+cloneMktpService()
+{
+  git clone "$github_url/$buildly_mkt_path/$1.git" "YourApplication/services/$1";
+}
 
-if [ "$service_answer2" != "${service_answer2#[Yy]}" ] ;then
-  # list marketplace open source repost
-  # clone all repositories
-  for repo in `curl -s $github_api_url/orgs/$buildly_mkt_path/repos?per_page=1000 | grep full_name | awk '{print $2}'| sed 's/"\(.*\)",/\1/'`;do
-    remove="$buildly_mkt_path/"
-    name=${repo//$remove/}
-    echo -n "Would you like to clone and use " $name " from the marketplace? Yes [Y/y] or No [N/n]"
-    read service_answer3
-
-    if [ "$service_answer3" != "${service_answer3#[Yy]}" ] ;then
-      git clone "$github_url/$repo.git" "YourApplication/services/$name";
-    fi
-  done;
-fi
-
-echo -n "Now... would you like to create a new service from scratch? Yes [Y/y] or No [N/n]"
-read service_answer
-
-if [ "$service_answer" != "${service_answer#[Yy]}" ] ;then
+# method to create django services from scratch using django wizard
+createDjangoService()
+{
   (
   cd "django-service-wizard" || exit
   # create a new service use django-service-wizard for now
   docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
   )
-fi
+}
 
-echo "Buildly services cloned and ready for configuration"
-
-echo -n "Now... would you like to connect your services to docker and a minikube instance? Yes [Y/y] or No [N/n]"
-read mini_kube
-
-if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
-  # start mini kube if not already
-  setupMinikube
-  # clone the helm chart to deploy core to minikube
-  if [ ! -d helm-charts/ ]; then
-    git clone $github_url/$buildly_helm_repo_path
+# method to create new applications
+createApplication()
+{
+  # create application and services folder
+  if [ -d YourApplication/ ]; then
+    echo -n "A folder called YourApplication already exists. Do you want to delete it and recreate? Yes [Y/y] or No [N/n] "
+    read folder_answer
+    if [ "$folder_answer" != "${folder_answer#[Yy]}" ] ;then
+      sudo rm -r YourApplication
+    else
+      exit
+    fi
   fi
-  # create buildly namespace
-  kubectl create namespace buildly || echo "Name space buildly already exists"
-  echo "Configure your buildly core to connect to a Database..."
-  echo -n "Enter host name or IP:"
-  read dbhost
-  echo -n "Enter Database Port:"
-  read dbport
-  echo -n "Enter Database Username:"
-  read dbuser
-  echo -n "Enter Database Password:"
-  read dbpass
-  # start helm
+  mkdir "YourApplication"
+  mkdir "YourApplication/services"
+
+  # set up application and services
   (
-  setupHelm
-  cd "helm-charts/buildly-core-chart" || exit
-  # install to minikube via helm
-  helm install . --name buildly-core --namespace buildly \
-  --set configmap.data.DATABASE_HOST=$dbhost \
-  --set configmap.data.DATABASE_PORT=\"$dbport\" \
-  --set secret.data.DATABASE_USER=$dbuser \
-  --set secret.data.DATABASE_PASSWORD=$dbpass
+  cd YourApplication || exit
+  setupBuildlyCore
   )
 
-  # build local images for each service
-  (
-  cd "YourApplication/services" || exit
-  eval $(minikube docker-env)
-  ls | while IFS= read -r service
+  # clone service repositories from GitHub
+  echo -n "Would you like to import a service from the marketplace? Yes [Y/y] or No [N/n] "
+  read mktp_service_answer1
+  if [ "$mktp_service_answer1" != "${mktp_service_answer1#[Yy]}" ] ;then
+    # list marketplace services and clone selected ones
+    for repo in $(listMktpServices);do
+      echo -n "Would you like to clone and use "$repo" from the marketplace? Yes [Y/y] or No [N/n] "
+      read mktp_service_answer2
+
+      if [ "$mktp_service_answer2" != "${mktp_service_answer2#[Yy]}" ] ;then
+        cloneMktpService "$repo"
+      fi
+    done;
+  fi
+
+  # loop for creation of multiple services from scratch
+  while :
   do
-    (
-    cd $service || exit
-    cleanedService=$(echo "$service" | tr "[:punct:]" -)
-    # build a local image
-    docker build . -t "${cleanedService}:latest"
-    # deploy to kubectl
-    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
-    )
+    echo -n "Would you like to create a service from scratch? Yes [Y/y] or No [N/n] "
+    read scratch_service_answer
+
+    if [ "$scratch_service_answer" != "${scratch_service_answer#[Yy]}" ] ;then
+      createDjangoService
+    else
+      break
+    fi
   done
-  )
 
-  echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
-  echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
-fi
+  deploy2Minikube
+  deploy2Provider
+}
 
-echo -n "Would you like to deploy to AWS, GCP or Digital Ocean Yes [Y/y] or No [N/n]"
-read provider
+deploy2Minikube()
+{
+  echo -n "Now... would you like to connect your services to docker and a minikube instance? Yes [Y/y] or No [N/n] "
+  read mini_kube
 
-if [ "$provider" != "${provider#[Yy]}" ] ;then
-  echo -n "Would you like to deploy to AWS? [Y/y] or No [N/n]"
-  read provider_name_aws
-  if [ "$provider_name_aws" != "${provider_name_aws#[Yy]}" ] ;then
-    echo "AWS ok....good luck with that!"
-  fi
-
-  echo -n "Would you like to deploy to GCP (Google Cloud)? [Y/y] or No [N/n]"
-  read provider_name_gcp
-  if [ "$provider_name_gcp" != "${provider_name_gcp#[Yy]}" ] ;then
-    echo "GCP...ok good luck with that!"
-  fi
-
-  echo -n "Would you like to deploy to Digital Ocean? [Y/y] or No [N/n]"
-  read provider_name_do
-  if [ "$provider_name_do" != "${provider_name_do#[Yy]}" ] ;then
-    echo "Digital OCean hosted Kubernetes... ok let's go!"
+  if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
+    # start mini kube if not already
+    setupMinikube
     # clone the helm chart to deploy core to minikube
-    git clone $github_url/$buildly_helm_repo_path
-
-    echo "Let's make sure you have your DO configs ready..."
-    # auth to DO
-    doctl auth init
-    echo "Get or set your local access token from Digital Oceans API manager https://cloud.digitalocean.com/account/api/tokens
-    Download the kubeconfig file for the cluster and move to your ~/.kube directory"
-    echo -n "Enter the name of your DO kubectl config file..."
-    # get file and path
-    read config_file
-
-    kubectl config current-context --kubeconfig ~/.kube/$config_file
-    kubectl config use-context $config_file
-
-    echo "Now we will set your context to DO and init helm..."
-    kubectl config use-context $config_file
-    helm init
-
-    echo "Now we will create a buildly Namespace and deploy with helm"
+    if [ ! -d helm-charts/ ]; then
+      git clone $github_url/$buildly_helm_repo_path
+    fi
+    # create buildly namespace
     kubectl create namespace buildly || echo "Name space buildly already exists"
     echo "Configure your buildly core to connect to a Database..."
-    echo -n "Enter host name or IP:"
+    echo -n "Enter host name or IP: "
     read dbhost
-    echo -n "Enter Database Port:"
+    echo -n "Enter Database Port: "
     read dbport
-    echo -n "Enter Database Username:"
+    echo -n "Enter Database Username: "
     read dbuser
-    echo -n "Enter Database Password:"
+    echo -n "Enter Database Password: "
     read dbpass
     # start helm
-    helm init
-    # install to minikube via hlem
+    (
+    setupHelm
+    cd "helm-charts/buildly-core-chart" || exit
+    # install to minikube via helm
     helm install . --name buildly-core --namespace buildly \
     --set configmap.data.DATABASE_HOST=$dbhost \
-    --set configmap.data.DATABASE_PORT=$dbport \
+    --set configmap.data.DATABASE_PORT=\"$dbport\" \
     --set secret.data.DATABASE_USER=$dbuser \
     --set secret.data.DATABASE_PASSWORD=$dbpass
+    )
 
     # build local images for each service
-    cd YourApplication/services
-    for service in ls
+    (
+    cd "YourApplication/services" || exit
+    eval $(minikube docker-env)
+    ls | while IFS= read -r service
     do
-      cd $service
+      (
+      cd $service || exit
+      cleanedService=$(echo "$service" | tr "[:punct:]" -)
       # build a local image
-      docker-compose build $service
+      docker build . -t "${cleanedService}:latest"
       # deploy to kubectl
-      kubectl run $service --image=$service --image-pull-policy=Never -n buildly
-      cd ../
+      kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
+      )
     done
+    )
 
-    # check on pods
-    kubectl get pods -n buildly
-
+    echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
+    echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
   fi
-fi
+}
+
+deploy2Provider()
+{
+  echo -n "Would you like to deploy to AWS, GCP or Digital Ocean Yes [Y/y] or No [N/n] "
+  read provider
+
+  if [ "$provider" != "${provider#[Yy]}" ] ;then
+    echo -n "Would you like to deploy to AWS? [Y/y] or No [N/n]"
+    read provider_name_aws
+    if [ "$provider_name_aws" != "${provider_name_aws#[Yy]}" ] ;then
+      echo "AWS ok....good luck with that!"
+    fi
+
+    echo -n "Would you like to deploy to GCP (Google Cloud)? [Y/y] or No [N/n]"
+    read provider_name_gcp
+    if [ "$provider_name_gcp" != "${provider_name_gcp#[Yy]}" ] ;then
+      echo "GCP...ok good luck with that!"
+    fi
+
+    echo -n "Would you like to deploy to Digital Ocean? [Y/y] or No [N/n]"
+    read provider_name_do
+    if [ "$provider_name_do" != "${provider_name_do#[Yy]}" ] ;then
+      echo "Digital OCean hosted Kubernetes... ok let's go!"
+      # clone the helm chart to deploy core to minikube
+      git clone $github_url/$buildly_helm_repo_path
+
+      echo "Let's make sure you have your DO configs ready..."
+      # auth to DO
+      doctl auth init
+      echo "Get or set your local access token from Digital Oceans API manager https://cloud.digitalocean.com/account/api/tokens
+      Download the kubeconfig file for the cluster and move to your ~/.kube directory"
+      echo -n "Enter the name of your DO kubectl config file..."
+      # get file and path
+      read config_file
+
+      kubectl config current-context --kubeconfig ~/.kube/$config_file
+      kubectl config use-context $config_file
+
+      echo "Now we will set your context to DO and init helm..."
+      kubectl config use-context $config_file
+      helm init
+
+      echo "Now we will create a buildly Namespace and deploy with helm"
+      kubectl create namespace buildly || echo "Name space buildly already exists"
+      echo "Configure your buildly core to connect to a Database..."
+      echo -n "Enter host name or IP:"
+      read dbhost
+      echo -n "Enter Database Port:"
+      read dbport
+      echo -n "Enter Database Username:"
+      read dbuser
+      echo -n "Enter Database Password:"
+      read dbpass
+      # start helm
+      helm init
+      # install to minikube via hlem
+      helm install . --name buildly-core --namespace buildly \
+      --set configmap.data.DATABASE_HOST=$dbhost \
+      --set configmap.data.DATABASE_PORT=$dbport \
+      --set secret.data.DATABASE_USER=$dbuser \
+      --set secret.data.DATABASE_PASSWORD=$dbpass
+
+      # build local images for each service
+      cd YourApplication/services
+      for service in ls
+      do
+        cd $service
+        # build a local image
+        docker-compose build $service
+        # deploy to kubectl
+        kubectl run $service --image=$service --image-pull-policy=Never -n buildly
+        cd ../
+      done
+
+      # check on pods
+      kubectl get pods -n buildly
+
+    fi
+  fi
+}
+
+##############################################################################
+#
+# Main
+#
+##############################################################################
+
+# init
+createApplication
