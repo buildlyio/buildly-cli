@@ -164,6 +164,65 @@ createApplication()
       break
     fi
   done
+
+  deploy2Minikube
+}
+
+deploy2Minikube()
+{
+  echo -n "Now... would you like to connect your services to docker and a minikube instance? Yes [Y/y] or No [N/n] "
+  read mini_kube
+
+  if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
+    # start mini kube if not already
+    setupMinikube
+    # clone the helm chart to deploy core to minikube
+    if [ ! -d helm-charts/ ]; then
+      git clone $github_url/$buildly_helm_repo_path
+    fi
+    # create buildly namespace
+    kubectl create namespace buildly || echo "Name space buildly already exists"
+    echo "Configure your buildly core to connect to a Database..."
+    echo -n "Enter host name or IP: "
+    read dbhost
+    echo -n "Enter Database Port: "
+    read dbport
+    echo -n "Enter Database Username: "
+    read dbuser
+    echo -n "Enter Database Password: "
+    read dbpass
+    # start helm
+    (
+    setupHelm
+    cd "helm-charts/buildly-core-chart" || exit
+    # install to minikube via helm
+    helm install . --name buildly-core --namespace buildly \
+    --set configmap.data.DATABASE_HOST=$dbhost \
+    --set configmap.data.DATABASE_PORT=\"$dbport\" \
+    --set secret.data.DATABASE_USER=$dbuser \
+    --set secret.data.DATABASE_PASSWORD=$dbpass
+    )
+
+    # build local images for each service
+    (
+    cd "YourApplication/services" || exit
+    eval $(minikube docker-env)
+    ls | while IFS= read -r service
+    do
+      (
+      cd $service || exit
+      cleanedService=$(echo "$service" | tr "[:punct:]" -)
+      # build a local image
+      docker build . -t "${cleanedService}:latest"
+      # deploy to kubectl
+      kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
+      )
+    done
+    )
+
+    echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
+    echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
+  fi
 }
 
 ##############################################################################
@@ -174,60 +233,6 @@ createApplication()
 
 # init
 createApplication
-
-echo -n "Now... would you like to connect your services to docker and a minikube instance? Yes [Y/y] or No [N/n]"
-read mini_kube
-
-if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
-  # start mini kube if not already
-  setupMinikube
-  # clone the helm chart to deploy core to minikube
-  if [ ! -d helm-charts/ ]; then
-    git clone $github_url/$buildly_helm_repo_path
-  fi
-  # create buildly namespace
-  kubectl create namespace buildly || echo "Name space buildly already exists"
-  echo "Configure your buildly core to connect to a Database..."
-  echo -n "Enter host name or IP:"
-  read dbhost
-  echo -n "Enter Database Port:"
-  read dbport
-  echo -n "Enter Database Username:"
-  read dbuser
-  echo -n "Enter Database Password:"
-  read dbpass
-  # start helm
-  (
-  setupHelm
-  cd "helm-charts/buildly-core-chart" || exit
-  # install to minikube via helm
-  helm install . --name buildly-core --namespace buildly \
-  --set configmap.data.DATABASE_HOST=$dbhost \
-  --set configmap.data.DATABASE_PORT=\"$dbport\" \
-  --set secret.data.DATABASE_USER=$dbuser \
-  --set secret.data.DATABASE_PASSWORD=$dbpass
-  )
-
-  # build local images for each service
-  (
-  cd "YourApplication/services" || exit
-  eval $(minikube docker-env)
-  ls | while IFS= read -r service
-  do
-    (
-    cd $service || exit
-    cleanedService=$(echo "$service" | tr "[:punct:]" -)
-    # build a local image
-    docker build . -t "${cleanedService}:latest"
-    # deploy to kubectl
-    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
-    )
-  done
-  )
-
-  echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
-  echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
-fi
 
 echo -n "Would you like to deploy to AWS, GCP or Digital Ocean Yes [Y/y] or No [N/n]"
 read provider
