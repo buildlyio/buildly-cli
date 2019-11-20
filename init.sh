@@ -404,6 +404,26 @@ echo " " | column -t -s ';'
 
 ##############################################################################
 #
+# Print REST service description
+#
+##############################################################################
+print_about() {
+    echo ""
+    echo -e "${BOLD}${WHITE}Buildly CLI 0.0.1${OFF}"
+    echo ""
+    echo -e "License: GPL-3.0"
+    echo -e "Contact: team@buildly.io"
+    echo -e "Website: https://buildly.io"
+    echo ""
+read -r -d '' appdescription <<EOF
+
+Command line tool for creating and configuring your buildly application.
+EOF
+echo "$appdescription" | paste -sd' ' | fold -sw 80
+}
+
+##############################################################################
+#
 # Main
 #
 ##############################################################################
@@ -421,6 +441,10 @@ case $key in
     ;;
     -V|--version)
     print_version
+    exit 0
+    ;;
+    --about)
+    print_about
     exit 0
     ;;
     -ca|--create-application)
