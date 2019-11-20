@@ -30,6 +30,36 @@ fi
 #
 ###############################################################################
 
+##
+# The filename of this script for help messages
+script_name=$(basename "$0")
+
+##
+# Declare colors with autodection if output is terminal
+if [ -t 1 ]; then
+    RED="$(tput setaf 1)"
+    GREEN="$(tput setaf 2)"
+    YELLOW="$(tput setaf 3)"
+    BLUE="$(tput setaf 4)"
+    MAGENTA="$(tput setaf 5)"
+    CYAN="$(tput setaf 6)"
+    WHITE="$(tput setaf 7)"
+    BOLD="$(tput bold)"
+    OFF="$(tput sgr0)"
+else
+    RED=""
+    GREEN=""
+    YELLOW=""
+    BLUE=""
+    MAGENTA=""
+    CYAN=""
+    WHITE=""
+    BOLD=""
+    OFF=""
+fi
+
+declare -a result_color_table=( "$WHITE" "$WHITE" "$GREEN" "$YELLOW" "$WHITE" "$MAGENTA" "$WHITE" )
+
 github_url="https://github.com"
 github_api_url="https://api.github.com"
 buildly_core_repo_path="buildlyio/buildly-core.git"
@@ -319,6 +349,48 @@ deploy2Provider()
   fi
 }
 
+###############################################################################
+#
+# Print main help message
+#
+###############################################################################
+print_help() {
+cat <<EOF
+
+${BOLD}${WHITE}Buildly CLI 0.0.1${OFF}
+
+${BOLD}${WHITE}Usage${OFF}
+
+  ${GREEN}${script_name}${OFF} [-h|--help] [-V|--version] [--about] [--create-application]
+           [--list-marketplace] [--clone-markeplace ${RED}<service-name>${OFF}]
+           [--create-service ${CYAN}<framework-name>${OFF}] [--deploy-minikube]
+           [--deploy-provider ${MAGENTA}<provider-name>${OFF}] [-nc|--no-colors]
+
+  - ${RED}<service-name>${OFF} - any service name from Buildly Marketplace can be give, e.g,
+                    ${YELLOW}kpi_service${OFF}
+  - ${CYAN}<framework-name>${OFF} - one of supported frameworks:
+                   (Django, Express)
+  - ${MAGENTA}<provider-name>${OFF} - either full provider name or one of supported abbreviations:
+                   (AWS, DO, GCP)
+
+EOF
+echo " " | column -t -s ';'
+    echo ""
+    echo -e "${BOLD}${WHITE}Options${OFF}"
+    echo -e "  -h,--help\\t\\t\\t\\t\\tPrint this help"
+    echo -e "  -V,--version\\t\\t\\t\\t\\tPrint CLI version"
+    echo -e "  --about\\t\\t\\t\\t\\tPrint the information about the tool"
+
+    echo -e "  -ca,--create-application\\t\\t\\tCreate, configure, and deploy a Buildly Core application with service"
+    echo -e "  --list-marketplace\\t\\t\\t\\tList availables service in Buildly Marketplace"
+    echo -e "  -cm,--clone-markeplace ${YELLOW}<service-name>${OFF}\\t\\tClone given service from Buildly Marketplace"
+    echo -e "  -cs,--create-service ${YELLOW}<framework-name>${OFF}\\t\\tCreate a service from scratch based on given framework name"
+    echo -e "  -d2m,--deploy-minikube\\t\\t\\tDeploy current Buildly Core to a Minikube instance"
+    echo -e "  -d2p,--deploy-provider ${YELLOW}<provider-name>${OFF}\\tDeploy current Buildly Core to a given provider"
+    echo -e "  -nc,--no-colors\\t\\t\\t\\tEnforce print without colors, otherwise autodected"
+    echo ""
+}
+
 ##############################################################################
 #
 # Main
@@ -332,6 +404,10 @@ type git >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Git' installed."
 for key in "$@"; do
 # Execute workflows based on the operation
 case $key in
+    -h|--help)
+    print_help
+    exit 0
+    ;;
     -ca|--create-application)
     createApplication
     exit 0
@@ -356,7 +432,21 @@ case $key in
     deploy2Provider
     exit 0
     ;;
+    -nc|--no-colors)
+        RED=""
+        GREEN=""
+        YELLOW=""
+        BLUE=""
+        MAGENTA=""
+        CYAN=""
+        WHITE=""
+        BOLD=""
+        OFF=""
+        result_color_table=( "" "" "" "" "" "" "" )
+    ;;
     *)
+    ERROR_MSG="ERROR: Unknown option: $key"
+    echo -e "${RED}$ERROR_MSG${OFF}"
     exit 1
 esac
 done
