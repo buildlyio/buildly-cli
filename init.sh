@@ -92,6 +92,29 @@ setupBuildlyCore()
   fi
 }
 
+# method to list services availables on Buildly Marketplace
+listMktpServices()
+{
+  services=$(curl -s $github_api_url/orgs/$buildly_mkt_path/repos?per_page=1000 | grep full_name | awk '{print $2}'| sed 's/.*\/\(.*\)",/\1/')
+  echo "$services"
+}
+
+# method to clone services from Buildly Marketplace
+cloneMktpService()
+{
+  git clone "$github_url/$buildly_mkt_path/$1.git" "YourApplication/services/$1";
+}
+
+# method to create django services from scratch using django wizard
+createDjangoService()
+{
+  (
+  cd "django-service-wizard" || exit
+  # create a new service use django-service-wizard for now
+  docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
+  )
+}
+
 # method to create new applications
 createApplication()
 {
@@ -113,6 +136,34 @@ createApplication()
   cd YourApplication || exit
   setupBuildlyCore
   )
+
+  # clone service repositories from GitHub
+  echo -n "Would you like to import a service from the marketplace? Yes [Y/y] or No [N/n] "
+  read mktp_service_answer1
+  if [ "$mktp_service_answer1" != "${mktp_service_answer1#[Yy]}" ] ;then
+    # list marketplace services and clone selected ones
+    for repo in $(listMktpServices);do
+      echo -n "Would you like to clone and use "$repo" from the marketplace? Yes [Y/y] or No [N/n] "
+      read mktp_service_answer2
+
+      if [ "$mktp_service_answer2" != "${mktp_service_answer2#[Yy]}" ] ;then
+        cloneMktpService "$repo"
+      fi
+    done;
+  fi
+
+  # loop for creation of multiple services from scratch
+  while :
+  do
+    echo -n "Would you like to create a service from scratch? Yes [Y/y] or No [N/n] "
+    read scratch_service_answer
+
+    if [ "$scratch_service_answer" != "${scratch_service_answer#[Yy]}" ] ;then
+      createDjangoService
+    else
+      break
+    fi
+  done
 }
 
 ##############################################################################
@@ -123,37 +174,6 @@ createApplication()
 
 # init
 createApplication
-
-echo -n "Would you like to import a service from the marketplace? Yes [Y/y] or No [N/n]"
-read service_answer2
-
-if [ "$service_answer2" != "${service_answer2#[Yy]}" ] ;then
-  # list marketplace open source repost
-  # clone all repositories
-  for repo in `curl -s $github_api_url/orgs/$buildly_mkt_path/repos?per_page=1000 | grep full_name | awk '{print $2}'| sed 's/"\(.*\)",/\1/'`;do
-    remove="$buildly_mkt_path/"
-    name=${repo//$remove/}
-    echo -n "Would you like to clone and use " $name " from the marketplace? Yes [Y/y] or No [N/n]"
-    read service_answer3
-
-    if [ "$service_answer3" != "${service_answer3#[Yy]}" ] ;then
-      git clone "$github_url/$repo.git" "YourApplication/services/$name";
-    fi
-  done;
-fi
-
-echo -n "Now... would you like to create a new service from scratch? Yes [Y/y] or No [N/n]"
-read service_answer
-
-if [ "$service_answer" != "${service_answer#[Yy]}" ] ;then
-  (
-  cd "django-service-wizard" || exit
-  # create a new service use django-service-wizard for now
-  docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
-  )
-fi
-
-echo "Buildly services cloned and ready for configuration"
 
 echo -n "Now... would you like to connect your services to docker and a minikube instance? Yes [Y/y] or No [N/n]"
 read mini_kube
