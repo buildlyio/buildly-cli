@@ -329,4 +329,34 @@ deploy2Provider()
 type curl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'cURL' installed."; exit 1; }
 type git >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Git' installed."; exit 1; }
 
-createApplication
+for key in "$@"; do
+# Execute workflows based on the operation
+case $key in
+    -ca|--create-application)
+    createApplication
+    exit 0
+    ;;
+    --list-marketplace)
+    listMktpServices
+    exit 0
+    ;;
+    -cm|--clone-markeplace)
+    cloneMktpService
+    exit 0
+    ;;
+    -cs|--create-service)
+    createDjangoService
+    exit 0
+    ;;
+    -d2m|--deploy-minikube)
+    deploy2Minikube
+    exit 0
+    ;;
+    -d2p|--deploy-provider)
+    deploy2Provider
+    exit 0
+    ;;
+    *)
+    exit 1
+esac
+done
