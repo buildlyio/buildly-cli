@@ -1,15 +1,28 @@
 #!/bin/bash
 
 #
-# This is a Buildly CLI tool to be used with Buildly Core.
+# This is a command line interface for buildly platform.
 #
-# LICENSE:
+# LICENSE: GPL-3.0
 #
+# CONTACT: team@buildly.io
 #
-# CONTACT:
-# website: https://buildly.io
-# email: team@buildly.io
+
+
+###############################################################################
 #
+# Make sure Bash is at least in version 4.3
+#
+###############################################################################
+if ! ( (("${BASH_VERSION:0:1}" == "4")) && (("${BASH_VERSION:2:1}" >= "3")) ) \
+  && ! (("${BASH_VERSION:0:1}" >= "5")); then
+    echo ""
+    echo "Sorry - your Bash version is ${BASH_VERSION}"
+    echo ""
+    echo "You need at least Bash 4.3 to run this script."
+    echo ""
+    exit 1
+fi
 
 ###############################################################################
 #
@@ -312,5 +325,8 @@ deploy2Provider()
 #
 ##############################################################################
 
-# init
+# Check dependencies
+type curl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'cURL' installed."; exit 1; }
+type git >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Git' installed."; exit 1; }
+
 createApplication
