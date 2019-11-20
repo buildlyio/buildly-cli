@@ -349,6 +349,17 @@ deploy2Provider()
   fi
 }
 
+##############################################################################
+#
+# Print CLI version
+#
+##############################################################################
+print_version() {
+    echo ""
+    echo -e "${BOLD}Buildly CLI 0.0.1${OFF}"
+    echo ""
+}
+
 ###############################################################################
 #
 # Print main help message
@@ -406,6 +417,10 @@ for key in "$@"; do
 case $key in
     -h|--help)
     print_help
+    exit 0
+    ;;
+    -V|--version)
+    print_version
     exit 0
     ;;
     -ca|--create-application)
