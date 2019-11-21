@@ -82,6 +82,12 @@ buildly_mkt_path="Buildly-Marketplace"
 # method responsible for starting a minikube instance
 setupMinikube()
 {
+  # Check specific dependencies
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+  type minikube >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Minikube' installed.
+  Check the documentation of how to install it: https://minikube.sigs.k8s.io/docs/start/"; exit 1; }
+
   status=$(minikube status)
   if [[ ! ( $status == *"host: Running"*  &&  $status == *"kubelet: Running"* &&  $status == *"apiserver: Running"* \
   &&  $status == *"kubeconfig: Configured"*) ]]; then
@@ -97,6 +103,10 @@ setupMinikube()
 # method responsible for initializing helm
 setupHelm()
 {
+  # Check specific dependencies
+  type helm >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Helm' installed.
+  Check the documentation of how to install it: https://helm.sh/docs/"; exit 1; }
+
   status=$(helm version)
   if [[ ! ( $status == *"Client: &version.Version"*  &&  $status == *"Server: &version.Version"*) ]]; then
     helm init
@@ -159,6 +169,10 @@ cloneMktpService()
 # method to create django services from scratch using django wizard
 createDjangoService()
 {
+  # Check specific dependencies
+  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
+  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
+
   if [ ! -d django-service-wizard ]; then
     MSG="The Django service wizard \"django-service-wizard\" wasn't found"
     print_message "error" "$MSG"
@@ -167,7 +181,7 @@ createDjangoService()
   (
   cd "django-service-wizard" || return
   # create a new service use django-service-wizard for now
-  docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
+  docker-compose run --rm django_service_wizard -u "$(id -u):$(id -g)" -v "$(pwd)":/code || echo "Docker not configured, installed or running"
   )
 }
 
@@ -262,6 +276,10 @@ createApplication()
 
 deploy2Minikube()
 {
+  # Check specific dependencies
+  type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
+  Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
+
   # start mini kube if not already
   setupMinikube
   # clone the helm chart to deploy core to minikube
@@ -330,9 +348,17 @@ deploy2GCP()
 
 deploy2DO()
 {
-  echo "Digital OCean hosted Kubernetes... ok let's go!"
+  # Check specific dependencies
+  type doctl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'DO CLI' installed.
+  Check the documentation of how to install it: https://github.com/digitalocean/doctl"; exit 1; }
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+
+  echo "Digital Ocean hosted Kubernetes... ok let's go!"
   # clone the helm chart to deploy core to minikube
-  git clone $github_url/$buildly_helm_repo_path
+  if [ ! -d helm-charts/ ]; then
+    git clone $github_url/$buildly_helm_repo_path
+  fi
 
   echo "Let's make sure you have your DO configs ready..."
   # auth to DO
@@ -477,7 +503,7 @@ echo " " | column -t -s ';'
 
 ##############################################################################
 #
-# Print REST service description
+# Print CLI description
 #
 ##############################################################################
 print_about() {
@@ -502,8 +528,10 @@ echo "$appdescription" | paste -sd' ' | fold -sw 80
 ##############################################################################
 
 # Check dependencies
-type curl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'cURL' installed."; exit 1; }
-type git >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Git' installed."; exit 1; }
+type curl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'cURL' installed.
+Check the documentation of how to install it: https://curl.haxx.se/download.html"; exit 1; }
+type git >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Git' installed.
+Check the documentation of how to install it: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git"; exit 1; }
 
 #
 # Process command line
