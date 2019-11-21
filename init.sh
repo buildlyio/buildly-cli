@@ -306,11 +306,8 @@ setupServices()
 #
 ##############################################################################
 
-deploy2Minikube()
+deployBuildlyCore()
 {
-  # start mini kube if not already
-  setupMinikube
-  # clone the helm chart to deploy core to minikube
   if [ ! -d helm-charts/ ]; then
     git clone $github_url/$buildly_helm_repo_path
   fi
@@ -326,21 +323,54 @@ deploy2Minikube()
   echo -n "Enter Database Password: "
   read dbpass
 
-  # start helm
-  if [ ! -d helm-charts/buildly-core-chart ]; then
-    MSG="The Buildly Core Helm chart \"helm-charts/buildly-core-chart\" wasn't found"
-    print_message "error" "$MSG"
-  fi
   (
   setupHelm
   cd "helm-charts/buildly-core-chart" || return
   # install to minikube via helm
-  helm install . --name buildly-core --namespace buildly \
-  --set configmap.data.DATABASE_HOST=$dbhost \
-  --set configmap.data.DATABASE_PORT=\"$dbport\" \
-  --set secret.data.DATABASE_USER=$dbuser \
-  --set secret.data.DATABASE_PASSWORD=$dbpass
+  if [ -n "$1" ] && [ "$1" == "GCP" ] ;then
+    echo -n "${BOLD}${WHITE}What's the name of the CloudSQL instance? ${OFF}"
+    read cloudsql_name
+
+    echo -n "${BOLD}${WHITE}What's the port to access the CloudSQL database? ${OFF}"
+    read cloudsql_port
+
+    echo -n "${BOLD}${WHITE}What's the name of the project that the CloudSQL lives? ${OFF}"
+    read cloudsql_project
+
+    echo -n "${BOLD}${WHITE}What's the name of the region where the instance is deployed? ${OFF}"
+    read cloudsql_region
+
+    echo -n "${BOLD}${WHITE}What's the name of the secret that holds the CloudSQL credentials? ${OFF}"
+    read cloudsql_secret
+
+    helm install . --name buildly-core --namespace buildly \
+    --set configmap.data.DATABASE_HOST="$dbhost" \
+    --set configmap.data.DATABASE_PORT=\""$dbport"\" \
+    --set secret.data.DATABASE_USER="$dbuser" \
+    --set secret.data.DATABASE_PASSWORD="$dbpass" \
+    --set gcp.enable="True" \
+    --set gcp.cloudsql.name="$cloudsql_name" \
+    --set gcp.cloudsql.port="$cloudsql_port" \
+    --set gcp.cloudsql.project_id="$cloudsql_project" \
+    --set gcp.cloudsql.region="$cloudsql_region" \
+    --set gcp.cloudsql.secretName="$cloudsql_secret"
+  else
+    helm install . --name buildly-core --namespace buildly \
+    --set configmap.data.DATABASE_HOST="$dbhost" \
+    --set configmap.data.DATABASE_PORT=\""$dbport"\" \
+    --set secret.data.DATABASE_USER="$dbuser" \
+    --set secret.data.DATABASE_PASSWORD="$dbpass"
+  fi
   )
+}
+
+deploy2Minikube()
+{
+  # start mini kube if not already
+  setupMinikube
+
+  # deploy buildly using helm charts
+  deployBuildlyCore
 
   # build local images for each service
   setupServices
@@ -353,7 +383,71 @@ deploy2AWS()
 
 deploy2GCP()
 {
-  echo "GCP...ok good luck with that!"
+  # Check specific dependencies
+  type gcloud >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Google Cloud CLI' installed.
+  Check the documentation of how to install it: https://cloud.google.com/sdk/install"; exit 1; }
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+
+  echo "Google Cloud hosted Kubernetes... ok let's go!"
+  echo "Let's make sure you have your Google Cloud configs ready..."
+
+  # init and auth to GCP
+  project=$(gcloud config get-value project)
+  if [ -z "$project" ]; then
+    gcloud init
+  else
+    # check if the same project will be used
+    echo -n "${BOLD}${WHITE}The project ${CYAN}\"$project\"${OFF} ${BOLD}${WHITE}will be used. Do you want to change it? [Y/y] or No [N/n] ${OFF}"
+    read change_project
+
+    # configure new project
+    if [ "$change_project" != "${change_project#[Yy]}" ] ;then
+      echo -n "${BOLD}${WHITE}Type the name of the project you want to use: ${OFF}"
+      read project
+    fi
+  fi
+
+  # define which kubernetes cluster will be used
+  echo -n "${BOLD}${WHITE}Enter the name of your GCP Kubernetes cluster: ${OFF}"
+  read k8s_cluster_name
+
+  echo -n "${BOLD}${WHITE}Is it a zonal or regional cluster? [zone] or [region] ${OFF}"
+  read cluster_type
+
+  # validate zonal/regional cluster response
+  if [ "$cluster_type" != "zone" ] && [ "$cluster_type" != "region" ]; then
+    MSG="You need to specify if your cluster is zonal or regional. Options: [zone] or [region]"
+    print_message "error" "$MSG"
+  fi
+
+  echo -n "${BOLD}${WHITE}Type the name of the zone(e.g, us-east1-b) or region(e.g, us-east1): ${OFF}"
+  read zone_region
+
+  # generate kubeconfig file and switch context of kubectl
+  gcloud container clusters get-credentials "$k8s_cluster_name" "--$cluster_type" "$zone_region" --project "$project"
+  contexts=$(kubectl config get-contexts)
+  if [[ ! ( $contexts == *"$k8s_cluster_name"*) ]]; then
+    MSG="Your cluster isn't available via \"kubectl\". Make sure your DO CLI and kubeconfig are well configured."
+    print_message "error" "$MSG"
+  fi
+
+  # enable access to database instance from cloudsql
+  echo -n "${BOLD}${WHITE}Is Buildly Core DB going to be a CloudSQL database? [Y/y] or No [N/n] ${OFF}"
+  read use_cloudsql
+
+  # deploy buildly using helm charts
+  if [ "$use_cloudsql" != "${use_cloudsql#[Yy]}" ] ;then
+    deployBuildlyCore "GCP"
+  else
+    deployBuildlyCore
+  fi
+
+  echo "Done! Your Buildly Core application is up and running in \"$k8s_cluster_name\"."
+  MSG="Services need to have a container image available on internet via a registry to be deployed to Kubernetes.
+      If you decide to have your own registry, check the following K8S tutorial of how to pull an image from a
+      private registry: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+  print_message "info" "$MSG"
 }
 
 deploy2DO()
@@ -379,40 +473,10 @@ deploy2DO()
     print_message "error" "$MSG"
   fi
 
-  # clone the helm chart to deploy core to minikube
-  if [ ! -d helm-charts/ ]; then
-    git clone $github_url/$buildly_helm_repo_path
-  fi
-  # create buildly namespace
-  echo "Create a namespace on Kubernetes for the application..."
-  kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
-  echo "Configure your buildly core to connect to a Database..."
-  echo -n "Enter host name or IP: "
-  read dbhost
-  echo -n "Enter Database Port: "
-  read dbport
-  echo -n "Enter Database Username: "
-  read dbuser
-  echo -n "Enter Database Password: "
-  read dbpass
+  # deploy buildly using helm charts
+  deployBuildlyCore
 
-  # start helm
-  if [ ! -d helm-charts/buildly-core-chart ]; then
-    MSG="The Buildly Core Helm chart \"helm-charts/buildly-core-chart\" wasn't found"
-    print_message "error" "$MSG"
-  fi
-  (
-  setupHelm
-  cd "helm-charts/buildly-core-chart" || return
-  # install to minikube via helm
-  helm install . --name buildly-core --namespace buildly \
-  --set configmap.data.DATABASE_HOST=$dbhost \
-  --set configmap.data.DATABASE_PORT=\"$dbport\" \
-  --set secret.data.DATABASE_USER=$dbuser \
-  --set secret.data.DATABASE_PASSWORD=$dbpass
-  )
-
-  echo "Done! You Buildly Core application is up and running in \"$k8s_cluster_name\"."
+  echo "Done! Your Buildly Core application is up and running in \"$k8s_cluster_name\"."
   MSG="Services need to have a container image available on internet via a registry to be deployed to Kubernetes.
       If you decide to have your own registry, check the following K8S tutorial of how to pull an image from a
       private registry: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
