@@ -60,6 +60,13 @@ fi
 
 declare -a result_color_table=( "$WHITE" "$WHITE" "$GREEN" "$YELLOW" "$WHITE" "$MAGENTA" "$WHITE" )
 
+##
+# The user credentials for basic authentication
+action=""
+service_name=""
+framework_name=""
+provider_name=""
+
 github_url="https://github.com"
 github_api_url="https://api.github.com"
 buildly_core_repo_path="buildlyio/buildly-core.git"
@@ -498,60 +505,123 @@ echo "$appdescription" | paste -sd' ' | fold -sw 80
 type curl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'cURL' installed."; exit 1; }
 type git >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Git' installed."; exit 1; }
 
+#
+# Process command line
+#
+# Pass all arguments before 'operation' to cURL except the ones we override
+#
+get_service=false
+get_framework=false
+get_provider=false
+
 for key in "$@"; do
-# Execute workflows based on the operation
+# get the value of -cm,--clone-markeplace argument
+if [[ "$get_service" = true ]]; then
+    service_name="$key"
+    get_service=false
+    continue
+fi
+# Take the value of -cs,--create-service argument
+if [[ "$get_framework" = true ]]; then
+    framework_name="$key"
+    get_framework=false
+    continue
+fi
+# Take the value of -d2p,--deploy-provider argument
+if [[ "$get_provider" = true ]]; then
+    provider_name="$key"
+    get_provider=false
+    continue
+fi
+
+# Execute workflows based on the action
 case $key in
-    -h|--help)
-    print_help
-    exit 0
-    ;;
-    -V|--version)
-    print_version
-    exit 0
-    ;;
-    --about)
-    print_about
-    exit 0
-    ;;
-    -ca|--create-application)
-    createApplication
-    exit 0
-    ;;
-    --list-marketplace)
-    listMktpServices
-    exit 0
-    ;;
-    -cm|--clone-markeplace)
-    cloneMktpService
-    exit 0
-    ;;
-    -cs|--create-service)
-    createDjangoService
-    exit 0
-    ;;
-    -d2m|--deploy-minikube)
-    deploy2Minikube
-    exit 0
-    ;;
-    -d2p|--deploy-provider)
-    deploy2Provider
-    exit 0
-    ;;
-    -nc|--no-colors)
-        RED=""
-        GREEN=""
-        YELLOW=""
-        BLUE=""
-        MAGENTA=""
-        CYAN=""
-        WHITE=""
-        BOLD=""
-        OFF=""
-        result_color_table=( "" "" "" "" "" "" "" )
-    ;;
-    *)
-    ERROR_MSG="ERROR: Unknown option: $key"
-    echo -e "${RED}$ERROR_MSG${OFF}"
-    exit 1
+  -h|--help)
+  print_help
+  exit 0
+  ;;
+  -V|--version)
+  print_version
+  exit 0
+  ;;
+  --about)
+  print_about
+  exit 0
+  ;;
+  -ca|--create-application)
+  action="createApplication"
+  ;;
+  --list-marketplace)
+  action="listMktpServices"
+  ;;
+  -cm|--clone-markeplace)
+  get_service=true
+  action="cloneMktpService"
+  ;;
+  -cs|--create-service)
+  get_framework=true
+  action="createDjangoService"
+  ;;
+  -d2m|--deploy-minikube)
+  action="deploy2Minikube"
+  ;;
+  -d2p|--deploy-provider)
+  get_provider=true
+  action="deploy2Provider"
+  ;;
+  -nc|--no-colors)
+      RED=""
+      GREEN=""
+      YELLOW=""
+      BLUE=""
+      MAGENTA=""
+      CYAN=""
+      WHITE=""
+      BOLD=""
+      OFF=""
+      result_color_table=( "" "" "" "" "" "" "" )
+  ;;
 esac
 done
+
+if [[ -z "$action" ]]; then
+  MSG="No action specified!"
+  print_message "error" "$MSG"
+fi
+
+# call function based on the action
+case $action in
+  createApplication)
+  createApplication
+  ;;
+  listMktpServices)
+  listMktpServices
+  ;;
+  cloneMktpService)
+  if [[ -z "$service_name" ]]; then
+    MSG="No service name specified!"
+    print_message "error" "$MSG"
+  fi
+  cloneMktpService "$service_name"
+  ;;
+  createDjangoService)
+  if [[ -z "$framework_name" ]]; then
+    MSG="No framework name specified!"
+    print_message "error" "$MSG"
+  fi
+  createDjangoService "$framework_name"
+  ;;
+  deploy2Minikube)
+  deploy2Provider "Minikube"
+  ;;
+  deploy2Provider)
+  if [[ -z "$provider_name" ]]; then
+    MSG="No provider name specified!"
+    print_message "error" "$MSG"
+  fi
+  deploy2Provider "$provider_name"
+  ;;
+  *)
+  MSG="Unknown option: $key"
+  print_message "error" "$MSG"
+esac
