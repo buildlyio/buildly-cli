@@ -365,60 +365,58 @@ deploy2DO()
   Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
 
   echo "Digital Ocean hosted Kubernetes... ok let's go!"
+  echo "Let's make sure you have your DO configs ready..."
+  # auth to DO
+  doctl auth init
+  echo -n "${BOLD}${WHITE}Enter the name of your DO Kubernetes cluster: ${OFF}"
+  read k8s_cluster_name
+
+  # get kubeconfig file and switch context of kubectl
+  doctl kubernetes cluster kubeconfig save $k8s_cluster_name
+  contexts=$(kubectl config get-contexts)
+  if [[ ! ( $contexts == *"$k8s_cluster_name"*) ]]; then
+    MSG="Your cluster isn't available via \"kubectl\". Make sure your DO CLI and kubeconfig are well configured."
+    print_message "error" "$MSG"
+  fi
+
   # clone the helm chart to deploy core to minikube
   if [ ! -d helm-charts/ ]; then
     git clone $github_url/$buildly_helm_repo_path
   fi
-
-  echo "Let's make sure you have your DO configs ready..."
-  # auth to DO
-  doctl auth init
-  echo "Get or set your local access token from Digital Oceans API manager https://cloud.digitalocean.com/account/api/tokens
-  Download the kubeconfig file for the cluster and move to your ~/.kube directory"
-  echo -n "Enter the name of your DO kubectl config file..."
-  # get file and path
-  read config_file
-
-  kubectl config current-context --kubeconfig ~/.kube/$config_file
-  kubectl config use-context $config_file
-
-  echo "Now we will set your context to DO and init helm..."
-  kubectl config use-context $config_file
-  helm init
-
-  echo "Now we will create a buildly Namespace and deploy with helm"
-  kubectl create namespace buildly || echo "Name space buildly already exists"
+  # create buildly namespace
+  echo "Create a namespace on Kubernetes for the application..."
+  kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
   echo "Configure your buildly core to connect to a Database..."
-  echo -n "Enter host name or IP:"
+  echo -n "Enter host name or IP: "
   read dbhost
-  echo -n "Enter Database Port:"
+  echo -n "Enter Database Port: "
   read dbport
-  echo -n "Enter Database Username:"
+  echo -n "Enter Database Username: "
   read dbuser
-  echo -n "Enter Database Password:"
+  echo -n "Enter Database Password: "
   read dbpass
+
   # start helm
-  helm init
-  # install to minikube via hlem
+  if [ ! -d helm-charts/buildly-core-chart ]; then
+    MSG="The Buildly Core Helm chart \"helm-charts/buildly-core-chart\" wasn't found"
+    print_message "error" "$MSG"
+  fi
+  (
+  setupHelm
+  cd "helm-charts/buildly-core-chart" || return
+  # install to minikube via helm
   helm install . --name buildly-core --namespace buildly \
   --set configmap.data.DATABASE_HOST=$dbhost \
-  --set configmap.data.DATABASE_PORT=$dbport \
+  --set configmap.data.DATABASE_PORT=\"$dbport\" \
   --set secret.data.DATABASE_USER=$dbuser \
   --set secret.data.DATABASE_PASSWORD=$dbpass
-
-  # build local images for each service
-  (
-  cd YourApplication/services || return
-  for service in ls
-  do
-    cd $service
-    # build a local image
-    docker-compose build $service
-    # deploy to kubectl
-    kubectl run $service --image=$service --image-pull-policy=Never -n buildly
-    cd ../
-  done
   )
+
+  echo "Done! You Buildly Core application is up and running in \"$k8s_cluster_name\"."
+  MSG="Services need to have a container image available on internet via a registry to be deployed to Kubernetes.
+      If you decide to have your own registry, check the following K8S tutorial of how to pull an image from a
+      private registry: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+  print_message "info" "$MSG"
 }
 
 deploy2Provider()
