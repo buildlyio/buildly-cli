@@ -82,6 +82,12 @@ buildly_mkt_path="Buildly-Marketplace"
 # method responsible for starting a minikube instance
 setupMinikube()
 {
+  # Check specific dependencies
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+  type minikube >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Minikube' installed.
+  Check the documentation of how to install it: https://minikube.sigs.k8s.io/docs/start/"; exit 1; }
+
   status=$(minikube status)
   if [[ ! ( $status == *"host: Running"*  &&  $status == *"kubelet: Running"* &&  $status == *"apiserver: Running"* \
   &&  $status == *"kubeconfig: Configured"*) ]]; then
@@ -97,6 +103,10 @@ setupMinikube()
 # method responsible for initializing helm
 setupHelm()
 {
+  # Check specific dependencies
+  type helm >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Helm' installed.
+  Check the documentation of how to install it: https://helm.sh/docs/"; exit 1; }
+
   status=$(helm version)
   if [[ ! ( $status == *"Client: &version.Version"*  &&  $status == *"Server: &version.Version"*) ]]; then
     helm init
@@ -159,6 +169,10 @@ cloneMktpService()
 # method to create django services from scratch using django wizard
 createDjangoService()
 {
+  # Check specific dependencies
+  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
+  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
+
   if [ ! -d django-service-wizard ]; then
     MSG="The Django service wizard \"django-service-wizard\" wasn't found"
     print_message "error" "$MSG"
@@ -167,7 +181,7 @@ createDjangoService()
   (
   cd "django-service-wizard" || return
   # create a new service use django-service-wizard for now
-  docker-compose run --rm django_service_wizard -u $(id -u):$(id -g) -v "$(pwd)":/code || echo "Docker not configured, installed or running"
+  docker-compose run --rm django_service_wizard -u "$(id -u):$(id -g)" -v "$(pwd)":/code || echo "Docker not configured, installed or running"
   )
 }
 
@@ -254,6 +268,38 @@ createApplication()
   fi
 }
 
+setupServices()
+{
+  # Check specific dependencies
+  type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
+  Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+
+  # check if service folder exists inside of application's folder
+  if [ ! -d YourApplication/services ]; then
+    MSG="The application folder \"YourApplication/services\" doesn't exist"
+    print_message "error" "$MSG"
+  fi
+
+  (
+  cd "YourApplication/services" || return
+  eval $(minikube docker-env)
+  # loop through all services and build their images
+  ls | while IFS= read -r service
+  do
+    (
+    cd $service || exit
+    cleanedService=$(echo "$service" | tr "[:punct:]" -)
+    # build a local image
+    docker build . -t "${cleanedService}:latest" || exit
+    # deploy to kubectl
+    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
+    )
+  done
+  )
+}
+
 ##############################################################################
 #
 # Deploy functions
@@ -297,25 +343,7 @@ deploy2Minikube()
   )
 
   # build local images for each service
-  if [ ! -d YourApplication/services ]; then
-    MSG="The application folder \"YourApplication/services\" doesn't exist"
-    print_message "error" "$MSG"
-  fi
-  (
-  cd "YourApplication/services" || return
-  eval $(minikube docker-env)
-  ls | while IFS= read -r service
-  do
-    (
-    cd $service || exit
-    cleanedService=$(echo "$service" | tr "[:punct:]" -)
-    # build a local image
-    docker build . -t "${cleanedService}:latest" || exit
-    # deploy to kubectl
-    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
-    )
-  done
-  )
+  setupServices
 }
 
 deploy2AWS()
@@ -330,59 +358,65 @@ deploy2GCP()
 
 deploy2DO()
 {
-  echo "Digital OCean hosted Kubernetes... ok let's go!"
-  # clone the helm chart to deploy core to minikube
-  git clone $github_url/$buildly_helm_repo_path
+  # Check specific dependencies
+  type doctl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'DO CLI' installed.
+  Check the documentation of how to install it: https://github.com/digitalocean/doctl"; exit 1; }
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
 
+  echo "Digital Ocean hosted Kubernetes... ok let's go!"
   echo "Let's make sure you have your DO configs ready..."
   # auth to DO
   doctl auth init
-  echo "Get or set your local access token from Digital Oceans API manager https://cloud.digitalocean.com/account/api/tokens
-  Download the kubeconfig file for the cluster and move to your ~/.kube directory"
-  echo -n "Enter the name of your DO kubectl config file..."
-  # get file and path
-  read config_file
+  echo -n "${BOLD}${WHITE}Enter the name of your DO Kubernetes cluster: ${OFF}"
+  read k8s_cluster_name
 
-  kubectl config current-context --kubeconfig ~/.kube/$config_file
-  kubectl config use-context $config_file
+  # get kubeconfig file and switch context of kubectl
+  doctl kubernetes cluster kubeconfig save $k8s_cluster_name
+  contexts=$(kubectl config get-contexts)
+  if [[ ! ( $contexts == *"$k8s_cluster_name"*) ]]; then
+    MSG="Your cluster isn't available via \"kubectl\". Make sure your DO CLI and kubeconfig are well configured."
+    print_message "error" "$MSG"
+  fi
 
-  echo "Now we will set your context to DO and init helm..."
-  kubectl config use-context $config_file
-  helm init
-
-  echo "Now we will create a buildly Namespace and deploy with helm"
-  kubectl create namespace buildly || echo "Name space buildly already exists"
+  # clone the helm chart to deploy core to minikube
+  if [ ! -d helm-charts/ ]; then
+    git clone $github_url/$buildly_helm_repo_path
+  fi
+  # create buildly namespace
+  echo "Create a namespace on Kubernetes for the application..."
+  kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
   echo "Configure your buildly core to connect to a Database..."
-  echo -n "Enter host name or IP:"
+  echo -n "Enter host name or IP: "
   read dbhost
-  echo -n "Enter Database Port:"
+  echo -n "Enter Database Port: "
   read dbport
-  echo -n "Enter Database Username:"
+  echo -n "Enter Database Username: "
   read dbuser
-  echo -n "Enter Database Password:"
+  echo -n "Enter Database Password: "
   read dbpass
+
   # start helm
-  helm init
-  # install to minikube via hlem
+  if [ ! -d helm-charts/buildly-core-chart ]; then
+    MSG="The Buildly Core Helm chart \"helm-charts/buildly-core-chart\" wasn't found"
+    print_message "error" "$MSG"
+  fi
+  (
+  setupHelm
+  cd "helm-charts/buildly-core-chart" || return
+  # install to minikube via helm
   helm install . --name buildly-core --namespace buildly \
   --set configmap.data.DATABASE_HOST=$dbhost \
-  --set configmap.data.DATABASE_PORT=$dbport \
+  --set configmap.data.DATABASE_PORT=\"$dbport\" \
   --set secret.data.DATABASE_USER=$dbuser \
   --set secret.data.DATABASE_PASSWORD=$dbpass
-
-  # build local images for each service
-  (
-  cd YourApplication/services || return
-  for service in ls
-  do
-    cd $service
-    # build a local image
-    docker-compose build $service
-    # deploy to kubectl
-    kubectl run $service --image=$service --image-pull-policy=Never -n buildly
-    cd ../
-  done
   )
+
+  echo "Done! You Buildly Core application is up and running in \"$k8s_cluster_name\"."
+  MSG="Services need to have a container image available on internet via a registry to be deployed to Kubernetes.
+      If you decide to have your own registry, check the following K8S tutorial of how to pull an image from a
+      private registry: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+  print_message "info" "$MSG"
 }
 
 deploy2Provider()
@@ -477,7 +511,7 @@ echo " " | column -t -s ';'
 
 ##############################################################################
 #
-# Print REST service description
+# Print CLI description
 #
 ##############################################################################
 print_about() {
@@ -502,8 +536,10 @@ echo "$appdescription" | paste -sd' ' | fold -sw 80
 ##############################################################################
 
 # Check dependencies
-type curl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'cURL' installed."; exit 1; }
-type git >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Git' installed."; exit 1; }
+type curl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'cURL' installed.
+Check the documentation of how to install it: https://curl.haxx.se/download.html"; exit 1; }
+type git >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Git' installed.
+Check the documentation of how to install it: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git"; exit 1; }
 
 #
 # Process command line
