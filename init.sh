@@ -268,6 +268,38 @@ createApplication()
   fi
 }
 
+setupServices()
+{
+  # Check specific dependencies
+  type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
+  Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+
+  # check if service folder exists inside of application's folder
+  if [ ! -d YourApplication/services ]; then
+    MSG="The application folder \"YourApplication/services\" doesn't exist"
+    print_message "error" "$MSG"
+  fi
+
+  (
+  cd "YourApplication/services" || return
+  eval $(minikube docker-env)
+  # loop through all services and build their images
+  ls | while IFS= read -r service
+  do
+    (
+    cd $service || exit
+    cleanedService=$(echo "$service" | tr "[:punct:]" -)
+    # build a local image
+    docker build . -t "${cleanedService}:latest" || exit
+    # deploy to kubectl
+    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
+    )
+  done
+  )
+}
+
 ##############################################################################
 #
 # Deploy functions
@@ -276,10 +308,6 @@ createApplication()
 
 deploy2Minikube()
 {
-  # Check specific dependencies
-  type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
-  Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
-
   # start mini kube if not already
   setupMinikube
   # clone the helm chart to deploy core to minikube
@@ -315,25 +343,7 @@ deploy2Minikube()
   )
 
   # build local images for each service
-  if [ ! -d YourApplication/services ]; then
-    MSG="The application folder \"YourApplication/services\" doesn't exist"
-    print_message "error" "$MSG"
-  fi
-  (
-  cd "YourApplication/services" || return
-  eval $(minikube docker-env)
-  ls | while IFS= read -r service
-  do
-    (
-    cd $service || exit
-    cleanedService=$(echo "$service" | tr "[:punct:]" -)
-    # build a local image
-    docker build . -t "${cleanedService}:latest" || exit
-    # deploy to kubectl
-    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
-    )
-  done
-  )
+  setupServices
 }
 
 deploy2AWS()
