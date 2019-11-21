@@ -306,11 +306,8 @@ setupServices()
 #
 ##############################################################################
 
-deploy2Minikube()
+deployBuildlyCore()
 {
-  # start mini kube if not already
-  setupMinikube
-  # clone the helm chart to deploy core to minikube
   if [ ! -d helm-charts/ ]; then
     git clone $github_url/$buildly_helm_repo_path
   fi
@@ -326,11 +323,6 @@ deploy2Minikube()
   echo -n "Enter Database Password: "
   read dbpass
 
-  # start helm
-  if [ ! -d helm-charts/buildly-core-chart ]; then
-    MSG="The Buildly Core Helm chart \"helm-charts/buildly-core-chart\" wasn't found"
-    print_message "error" "$MSG"
-  fi
   (
   setupHelm
   cd "helm-charts/buildly-core-chart" || return
@@ -341,6 +333,15 @@ deploy2Minikube()
   --set secret.data.DATABASE_USER=$dbuser \
   --set secret.data.DATABASE_PASSWORD=$dbpass
   )
+}
+
+deploy2Minikube()
+{
+  # start mini kube if not already
+  setupMinikube
+
+  # deploy buildly using helm charts
+  deployBuildlyCore
 
   # build local images for each service
   setupServices
@@ -379,38 +380,8 @@ deploy2DO()
     print_message "error" "$MSG"
   fi
 
-  # clone the helm chart to deploy core to minikube
-  if [ ! -d helm-charts/ ]; then
-    git clone $github_url/$buildly_helm_repo_path
-  fi
-  # create buildly namespace
-  echo "Create a namespace on Kubernetes for the application..."
-  kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
-  echo "Configure your buildly core to connect to a Database..."
-  echo -n "Enter host name or IP: "
-  read dbhost
-  echo -n "Enter Database Port: "
-  read dbport
-  echo -n "Enter Database Username: "
-  read dbuser
-  echo -n "Enter Database Password: "
-  read dbpass
-
-  # start helm
-  if [ ! -d helm-charts/buildly-core-chart ]; then
-    MSG="The Buildly Core Helm chart \"helm-charts/buildly-core-chart\" wasn't found"
-    print_message "error" "$MSG"
-  fi
-  (
-  setupHelm
-  cd "helm-charts/buildly-core-chart" || return
-  # install to minikube via helm
-  helm install . --name buildly-core --namespace buildly \
-  --set configmap.data.DATABASE_HOST=$dbhost \
-  --set configmap.data.DATABASE_PORT=\"$dbport\" \
-  --set secret.data.DATABASE_USER=$dbuser \
-  --set secret.data.DATABASE_PASSWORD=$dbpass
-  )
+  # deploy buildly using helm charts
+  deployBuildlyCore
 
   echo "Done! You Buildly Core application is up and running in \"$k8s_cluster_name\"."
   MSG="Services need to have a container image available on internet via a registry to be deployed to Kubernetes.
