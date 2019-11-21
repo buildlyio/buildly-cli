@@ -221,19 +221,37 @@ createApplication()
   read mini_kube
 
   if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
-    deploy2Minikube
+    deploy2Provider "Minikube"
 
     echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
     echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
   fi
 
-  echo -n "${BOLD}${WHITE}Would you like to deploy to AWS, GCP or Digital Ocean Yes [Y/y] or No [N/n] ${OFF}"
-  read provider
+  # deploy application to a cloud provider
+  echo -n "${BOLD}${WHITE}Would you like to deploy to AWS? [Y/y] or No [N/n] ${OFF}"
+  read provider_name_aws
+  if [ "$provider_name_aws" != "${provider_name_aws#[Yy]}" ] ;then
+    deploy2Provider "AWS"
+  fi
 
-  if [ "$provider" != "${provider#[Yy]}" ] ;then
-    deploy2Provider
+  echo -n "${BOLD}${WHITE}Would you like to deploy to GCP (Google Cloud)? [Y/y] or No [N/n] ${OFF}"
+  read provider_name_gcp
+  if [ "$provider_name_gcp" != "${provider_name_gcp#[Yy]}" ] ;then
+    deploy2Provider "GCP"
+  fi
+
+  echo -n "${BOLD}${WHITE}Would you like to deploy to Digital Ocean? [Y/y] or No [N/n] ${OFF}"
+  read provider_name_do
+  if [ "$provider_name_do" != "${provider_name_do#[Yy]}" ] ;then
+    deploy2Provider "DO"
   fi
 }
+
+##############################################################################
+#
+# Deploy functions
+#
+##############################################################################
 
 deploy2Minikube()
 {
@@ -293,79 +311,92 @@ deploy2Minikube()
   )
 }
 
+deploy2AWS()
+{
+  echo "AWS ok....good luck with that!"
+}
+
+deploy2GCP()
+{
+  echo "GCP...ok good luck with that!"
+}
+
+deploy2DO()
+{
+  echo "Digital OCean hosted Kubernetes... ok let's go!"
+  # clone the helm chart to deploy core to minikube
+  git clone $github_url/$buildly_helm_repo_path
+
+  echo "Let's make sure you have your DO configs ready..."
+  # auth to DO
+  doctl auth init
+  echo "Get or set your local access token from Digital Oceans API manager https://cloud.digitalocean.com/account/api/tokens
+  Download the kubeconfig file for the cluster and move to your ~/.kube directory"
+  echo -n "Enter the name of your DO kubectl config file..."
+  # get file and path
+  read config_file
+
+  kubectl config current-context --kubeconfig ~/.kube/$config_file
+  kubectl config use-context $config_file
+
+  echo "Now we will set your context to DO and init helm..."
+  kubectl config use-context $config_file
+  helm init
+
+  echo "Now we will create a buildly Namespace and deploy with helm"
+  kubectl create namespace buildly || echo "Name space buildly already exists"
+  echo "Configure your buildly core to connect to a Database..."
+  echo -n "Enter host name or IP:"
+  read dbhost
+  echo -n "Enter Database Port:"
+  read dbport
+  echo -n "Enter Database Username:"
+  read dbuser
+  echo -n "Enter Database Password:"
+  read dbpass
+  # start helm
+  helm init
+  # install to minikube via hlem
+  helm install . --name buildly-core --namespace buildly \
+  --set configmap.data.DATABASE_HOST=$dbhost \
+  --set configmap.data.DATABASE_PORT=$dbport \
+  --set secret.data.DATABASE_USER=$dbuser \
+  --set secret.data.DATABASE_PASSWORD=$dbpass
+
+  # build local images for each service
+  (
+  cd YourApplication/services || return
+  for service in ls
+  do
+    cd $service
+    # build a local image
+    docker-compose build $service
+    # deploy to kubectl
+    kubectl run $service --image=$service --image-pull-policy=Never -n buildly
+    cd ../
+  done
+  )
+}
+
 deploy2Provider()
 {
-  echo -n "${BOLD}${WHITE}Would you like to deploy to AWS? [Y/y] or No [N/n] ${OFF}"
-  read provider_name_aws
-  if [ "$provider_name_aws" != "${provider_name_aws#[Yy]}" ] ;then
-    echo "AWS ok....good luck with that!"
-  fi
-
-  echo -n "${BOLD}${WHITE}Would you like to deploy to GCP (Google Cloud)? [Y/y] or No [N/n] ${OFF}"
-  read provider_name_gcp
-  if [ "$provider_name_gcp" != "${provider_name_gcp#[Yy]}" ] ;then
-    echo "GCP...ok good luck with that!"
-  fi
-
-  echo -n "${BOLD}${WHITE}Would you like to deploy to Digital Ocean? [Y/y] or No [N/n] ${OFF}"
-  read provider_name_do
-  if [ "$provider_name_do" != "${provider_name_do#[Yy]}" ] ;then
-    echo "Digital OCean hosted Kubernetes... ok let's go!"
-    # clone the helm chart to deploy core to minikube
-    git clone $github_url/$buildly_helm_repo_path
-
-    echo "Let's make sure you have your DO configs ready..."
-    # auth to DO
-    doctl auth init
-    echo "Get or set your local access token from Digital Oceans API manager https://cloud.digitalocean.com/account/api/tokens
-    Download the kubeconfig file for the cluster and move to your ~/.kube directory"
-    echo -n "Enter the name of your DO kubectl config file..."
-    # get file and path
-    read config_file
-
-    kubectl config current-context --kubeconfig ~/.kube/$config_file
-    kubectl config use-context $config_file
-
-    echo "Now we will set your context to DO and init helm..."
-    kubectl config use-context $config_file
-    helm init
-
-    echo "Now we will create a buildly Namespace and deploy with helm"
-    kubectl create namespace buildly || echo "Name space buildly already exists"
-    echo "Configure your buildly core to connect to a Database..."
-    echo -n "Enter host name or IP:"
-    read dbhost
-    echo -n "Enter Database Port:"
-    read dbport
-    echo -n "Enter Database Username:"
-    read dbuser
-    echo -n "Enter Database Password:"
-    read dbpass
-    # start helm
-    helm init
-    # install to minikube via hlem
-    helm install . --name buildly-core --namespace buildly \
-    --set configmap.data.DATABASE_HOST=$dbhost \
-    --set configmap.data.DATABASE_PORT=$dbport \
-    --set secret.data.DATABASE_USER=$dbuser \
-    --set secret.data.DATABASE_PASSWORD=$dbpass
-
-    # build local images for each service
-    cd YourApplication/services
-    for service in ls
-    do
-      cd $service
-      # build a local image
-      docker-compose build $service
-      # deploy to kubectl
-      kubectl run $service --image=$service --image-pull-policy=Never -n buildly
-      cd ../
-    done
-
-    # check on pods
-    kubectl get pods -n buildly
-
-  fi
+  case $1 in
+    AWS)
+    deploy2AWS
+    ;;
+    DO)
+    deploy2DO
+    ;;
+    GCP)
+    deploy2GCP
+    ;;
+    Minikube)
+    deploy2Minikube
+    ;;
+    *)
+    MSG="The specified provider \"$1\" wasn't implemented yet"
+    print_message "error" "$MSG"
+  esac
 }
 
 ##############################################################################
@@ -417,7 +448,7 @@ ${BOLD}${WHITE}Usage${OFF}
   - ${CYAN}<framework-name>${OFF} - one of supported frameworks:
                    (Django, Express)
   - ${MAGENTA}<provider-name>${OFF} - either full provider name or one of supported abbreviations:
-                   (AWS, DO, GCP)
+                   (AWS, DO<DigitalOcean>, GCP)
 
 EOF
 echo " " | column -t -s ';'
