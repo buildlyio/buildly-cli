@@ -108,7 +108,7 @@ setupHelm()
   Check the documentation of how to install it: https://helm.sh/docs/"; exit 1; }
 
   status=$(helm version)
-  if [[ ! ( $status == *"Client: &version.Version"*  &&  $status == *"Server: &version.Version"*) ]]; then
+  if [[ ! ($status == *"Client: &version.Version"*  &&  $status == *"Server: &version.Version"* || $status == *"Version:\"v3.0.0\""*) ]]; then
     helm init
   else
     echo "Helm is already configured"
