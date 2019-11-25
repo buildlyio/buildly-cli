@@ -14,15 +14,15 @@
 # Make sure Bash is at least in version 4.3
 #
 ###############################################################################
-if ! ( (("${BASH_VERSION:0:1}" == "4")) && (("${BASH_VERSION:2:1}" >= "3")) ) \
-  && ! (("${BASH_VERSION:0:1}" >= "5")); then
-    echo ""
-    echo "Sorry - your Bash version is ${BASH_VERSION}"
-    echo ""
-    echo "You need at least Bash 4.3 to run this script."
-    echo ""
-    exit 1
-fi
+#if ! ( (("${BASH_VERSION:0:1}" == "4")) && (("${BASH_VERSION:2:1}" >= "3")) ) \
+#  && ! (("${BASH_VERSION:0:1}" >= "5")); then
+#    echo ""
+#    echo "Sorry - your Bash version is ${BASH_VERSION}"
+#    echo ""
+#    echo "You need at least Bash 4.3 to run this script."
+#    echo ""
+#    exit 1
+#fi
 
 ###############################################################################
 #
