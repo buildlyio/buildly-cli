@@ -528,16 +528,16 @@ deploy2DO()
 deploy2Provider()
 {
   case $1 in
-    AWS)
+    aws|AWS)
     deploy2AWS
     ;;
-    DO)
+    do|DO)
     deploy2DO
     ;;
-    GCP)
+    gcp|GCP)
     deploy2GCP
     ;;
-    Minikube)
+    minikube|Minikube)
     deploy2Minikube
     ;;
     docker|Docker)
