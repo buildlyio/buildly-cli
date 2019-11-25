@@ -238,13 +238,13 @@ createApplication()
     fi
   done
 
-  echo -n "${BOLD}${WHITE}Now... would you like to connect your services to docker and a minikube instance? Yes [Y/y] or No [N/n] ${OFF}"
-  read mini_kube
+  echo -n "${BOLD}${WHITE}Would you like to connect Buildly Core and your services to docker or a minikube instance? Docker [docker] or Minikube [minikube] ${OFF}"
+  read deployment_option
 
-  if [ "$mini_kube" != "${mini_kube#[Yy]}" ] ;then
-    deploy2Provider "Minikube"
+  if [ -n "$deployment_option" ] ;then
+    deploy2Provider "$deployment_option"
 
-    echo "Done!  Check your configuration and make sure pods running on your minikube instance and start coding!"
+    echo "Done!  Check your configuration and make sure Buildly Core and the services are running and start coding!"
     echo "Trouble? try the README files in the core or go to https://buildly-core.readthedocs.io/en/latest/"
   fi
 
@@ -376,6 +376,48 @@ deploy2Minikube()
   setupServices
 }
 
+deploy2Docker()
+{
+  # Check specific dependencies
+  type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
+  Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
+  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
+  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
+
+  # build and start buildly core
+  (
+  cd YourApplication/buildly-core || return
+  docker-compose build
+  docker-compose up -d
+  )
+
+  # build service images
+  (
+  cd "YourApplication/services" || return
+  ls | while IFS= read -r service
+  do
+    (
+    cd $service || exit
+    docker-compose build
+    docker-compose up -d
+    )
+  done
+  )
+
+  # create a network for buildly if it doesn't exist
+  docker_networks=$(docker network ls | tail -n +2 | awk '{print $2}')
+  if [[ $docker_networks != *"buildly_test"* ]]; then
+    docker network create buildly_test
+  fi
+
+  # add buildly core and all services to the created network
+  container_ids=$(docker ps -a | tail -n +2 | awk '{print $1}')
+  while read -r container_id; do
+    docker network connect buildly_test "$container_id"
+  done <<< "$container_ids"
+
+}
+
 deploy2AWS()
 {
   echo "AWS ok....good luck with that!"
@@ -497,6 +539,9 @@ deploy2Provider()
     ;;
     Minikube)
     deploy2Minikube
+    ;;
+    docker|Docker)
+    deploy2Docker
     ;;
     *)
     MSG="The specified provider \"$1\" wasn't implemented yet"
