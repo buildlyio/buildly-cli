@@ -347,7 +347,7 @@ deployBuildlyCore()
   fi
   # create buildly namespace
   kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
-  echo "Configure your buildly core to connect to a Database..."
+  echo "${BOLD}${WHITE}Configure your Buildly Core to connect to a Database...${OFF}"
   echo -n "Enter host name or IP: "
   read dbhost
   echo -n "Enter Database Port: "
@@ -361,7 +361,8 @@ deployBuildlyCore()
   setupHelm
   cd "helm-charts/buildly-core-chart" || return
   # install to minikube via helm
-  if [ -n "$1" ] && [ "$1" == "GCP" ] ;then
+  if [[ -n "$1" && ("$1" == "GCP" || "$1" == "gcp") ]] ;then
+    # TODO: Ask user if he/she is using CloudSQL for buildly core
     echo -n "${BOLD}${WHITE}What's the name of the CloudSQL instance? ${OFF}"
     read cloudsql_name
 
@@ -388,6 +389,15 @@ deployBuildlyCore()
     --set gcp.cloudsql.project_id="$cloudsql_project" \
     --set gcp.cloudsql.region="$cloudsql_region" \
     --set gcp.cloudsql.secretName="$cloudsql_secret"
+  elif [[ -n "$1" && ("$1" == "minikube" || "$1" == "Minikube") ]] ;then
+    helm install buildly-core . --namespace buildly \
+    --set configmap.data.DATABASE_HOST="$dbhost" \
+    --set configmap.data.DATABASE_PORT=\""$dbport"\" \
+    --set secret.data.DATABASE_USER="$dbuser" \
+    --set secret.data.DATABASE_PASSWORD="$dbpass" \
+    --set buildly.image.repository=buildly-core \
+    --set buildly.image.version=latest \
+    --set buildly.image.pullPolicy=IfNotPresent
   else
     helm install . --name buildly-core --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
