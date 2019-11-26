@@ -559,7 +559,7 @@ print_message() {
     echo -e "${BLUE}INFO: $2${OFF}"
   elif [ "$1" == "warn" ]; then
     echo -e "${YELLOW}WARN: $2${OFF}"
-  else
+  elif [ "$1" == "error" ]; then
     echo -e "${RED}ERROR: $2${OFF}"
     exit 1
   fi
@@ -585,6 +585,13 @@ print_help() {
 cat <<EOF
 
 ${BOLD}${WHITE}Buildly CLI 0.0.1${OFF}
+
+If it's your first time using this tool, you probably want to create an application,
+so you can just execute this script with the option --create-application or -ca, e.g,
+
+'''
+$script_name --create-application
+'''
 
 ${BOLD}${WHITE}Usage${OFF}
 
@@ -730,8 +737,9 @@ esac
 done
 
 if [[ -z "$action" ]]; then
-  MSG="No action specified!"
-  print_message "error" "$MSG"
+  MSG="Usage: $script_name [OPTION]\nTry '$script_name --help' for more information."
+  echo -e "$MSG"
+  exit 0
 fi
 
 # call function based on the action
