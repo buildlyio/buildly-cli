@@ -413,11 +413,13 @@ deploy2Minikube()
   # start mini kube if not already
   setupMinikube
 
-  # deploy buildly using helm charts
-  deployBuildlyCore
-
-  # build local images for each service
+  # build images for each service and buildly core
+  setupServices "buildly"
   setupServices
+
+  # deploy buildly and services to a minikube instance
+  deployBuildlyCore "minikube"
+  deployServices
 }
 
 deploy2Docker()
