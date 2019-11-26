@@ -316,6 +316,30 @@ setupServices()
 #
 ##############################################################################
 
+deployServices()
+{
+  # Check specific dependencies
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+
+  # check if service folder exists inside of application's folder
+  if [ ! -d YourApplication/services ]; then
+    MSG="The application folder \"YourApplication/services\" doesn't exist"
+    print_message "error" "$MSG"
+  fi
+
+  (
+  cd "YourApplication/services" || return
+  # loop through all services and build their images
+  ls | while IFS= read -r service
+  do
+    # deploy to kubectl
+    cleanedService=$(echo "$service" | tr "[:punct:]" -)
+    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
+  done
+  )
+}
+
 deployBuildlyCore()
 {
   if [ ! -d helm-charts/ ]; then
