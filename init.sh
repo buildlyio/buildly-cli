@@ -185,6 +185,42 @@ createDjangoService()
   )
 }
 
+# method to create Express services from scratch using Express wizard
+createExpressService()
+{
+  # Check specific dependencies
+  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
+  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
+
+  if [ ! -d express-service-wizard ]; then
+    MSG="The Express service wizard \"express-service-wizard\" wasn't found"
+    print_message "error" "$MSG"
+  fi
+
+  (
+  cd "express-service-wizard" || return
+  docker-compose run --rm express_service_wizard || echo "Docker not configured, installed or running"
+  )
+}
+
+# method to create Ruby on Rails services from scratch using Rails wizard
+createRailsService()
+{
+  # Check specific dependencies
+  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
+  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
+
+  if [ ! -d rails-service-wizard ]; then
+    MSG="The Ruby on Rails service wizard \"rails-service-wizard\" wasn't found"
+    print_message "error" "$MSG"
+  fi
+
+  (
+  cd "rails-service-wizard" || return
+  docker-compose run web rails new YourRailsApplication --force --no-deps --database=postgresql || echo "Docker not configured, installed or running"
+  )
+}
+
 # method to create new applications
 createApplication()
 {
@@ -273,52 +309,6 @@ setupServices()
   # Check specific dependencies
   type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
   Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
-
-  eval $(minikube docker-env)
-  if [[ -n "$1" && ("$1" == "buildly") ]] ;then
-    # check if buildly core folder exists inside of application's folder
-    if [ ! -d YourApplication/buildly-core ]; then
-      MSG="The application folder \"YourApplication/buildly-core\" doesn't exist"
-      print_message "error" "$MSG"
-    fi
-
-    # build buildly core
-    (
-    cd YourApplication/buildly-core || return
-    docker build . -t "buildly-core:latest" || exit
-    )
-  else
-    # check if service folder exists inside of application's folder
-    if [ ! -d YourApplication/services ]; then
-      MSG="The application folder \"YourApplication/services\" doesn't exist"
-      print_message "error" "$MSG"
-    fi
-
-    (
-    cd "YourApplication/services" || return
-    # loop through all services and build their images
-    ls | while IFS= read -r service
-    do
-      (
-      cd $service || exit
-      cleanedService=$(echo "$service" | tr "[:punct:]" -)
-      # build a local image
-      docker build . -t "${cleanedService}:latest" || exit
-      )
-    done
-    )
-  fi
-}
-
-##############################################################################
-#
-# Deploy functions
-#
-##############################################################################
-
-deployServices()
-{
-  # Check specific dependencies
   type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
   Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
 
@@ -330,15 +320,27 @@ deployServices()
 
   (
   cd "YourApplication/services" || return
+  eval $(minikube docker-env)
   # loop through all services and build their images
   ls | while IFS= read -r service
   do
-    # deploy to kubectl
+    (
+    cd $service || exit
     cleanedService=$(echo "$service" | tr "[:punct:]" -)
+    # build a local image
+    docker build . -t "${cleanedService}:latest" || exit
+    # deploy to kubectl
     kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
+    )
   done
   )
 }
+
+##############################################################################
+#
+# Deploy functions
+#
+##############################################################################
 
 deployBuildlyCore()
 {
@@ -347,7 +349,7 @@ deployBuildlyCore()
   fi
   # create buildly namespace
   kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
-  echo "${BOLD}${WHITE}Configure your Buildly Core to connect to a Database...${OFF}"
+  echo "Configure your buildly core to connect to a Database..."
   echo -n "Enter host name or IP: "
   read dbhost
   echo -n "Enter Database Port: "
@@ -361,8 +363,7 @@ deployBuildlyCore()
   setupHelm
   cd "helm-charts/buildly-core-chart" || return
   # install to minikube via helm
-  if [[ -n "$1" && ("$1" == "GCP" || "$1" == "gcp") ]] ;then
-    # TODO: Ask user if he/she is using CloudSQL for buildly core
+  if [ -n "$1" ] && [ "$1" == "GCP" ] ;then
     echo -n "${BOLD}${WHITE}What's the name of the CloudSQL instance? ${OFF}"
     read cloudsql_name
 
@@ -389,15 +390,6 @@ deployBuildlyCore()
     --set gcp.cloudsql.project_id="$cloudsql_project" \
     --set gcp.cloudsql.region="$cloudsql_region" \
     --set gcp.cloudsql.secretName="$cloudsql_secret"
-  elif [[ -n "$1" && ("$1" == "minikube" || "$1" == "Minikube") ]] ;then
-    helm install buildly-core . --namespace buildly \
-    --set configmap.data.DATABASE_HOST="$dbhost" \
-    --set configmap.data.DATABASE_PORT=\""$dbport"\" \
-    --set secret.data.DATABASE_USER="$dbuser" \
-    --set secret.data.DATABASE_PASSWORD="$dbpass" \
-    --set buildly.image.repository=buildly-core \
-    --set buildly.image.version=latest \
-    --set buildly.image.pullPolicy=IfNotPresent
   else
     helm install . --name buildly-core --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
@@ -413,13 +405,11 @@ deploy2Minikube()
   # start mini kube if not already
   setupMinikube
 
-  # build images for each service and buildly core
-  setupServices "buildly"
-  setupServices
+  # deploy buildly using helm charts
+  deployBuildlyCore
 
-  # deploy buildly and services to a minikube instance
-  deployBuildlyCore "minikube"
-  deployServices
+  # build local images for each service
+  setupServices
 }
 
 deploy2Docker()
@@ -605,7 +595,7 @@ print_message() {
     echo -e "${BLUE}INFO: $2${OFF}"
   elif [ "$1" == "warn" ]; then
     echo -e "${YELLOW}WARN: $2${OFF}"
-  elif [ "$1" == "error" ]; then
+  else
     echo -e "${RED}ERROR: $2${OFF}"
     exit 1
   fi
@@ -631,13 +621,6 @@ print_help() {
 cat <<EOF
 
 ${BOLD}${WHITE}Buildly CLI 0.0.1${OFF}
-
-If it's your first time using this tool, you probably want to create an application,
-so you can just execute this script with the option --create-application or -ca, e.g,
-
-'''
-$script_name --create-application
-'''
 
 ${BOLD}${WHITE}Usage${OFF}
 
@@ -783,9 +766,8 @@ esac
 done
 
 if [[ -z "$action" ]]; then
-  MSG="Usage: $script_name [OPTION]\nTry '$script_name --help' for more information."
-  echo -e "$MSG"
-  exit 0
+  MSG="No action specified!"
+  print_message "error" "$MSG"
 fi
 
 # call function based on the action
