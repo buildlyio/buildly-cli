@@ -361,7 +361,7 @@ deployBuildlyCore()
   setupHelm
   cd "helm-charts/buildly-core-chart" || return
   # install to minikube via helm
-  if [[ -n "$1" && ("$1" == "GCP" || "$1" == "gcp") ]] ;then
+  if [[ -n "$1" && ("$1" == "CloudSQL" || "$1" == "cloudsql") ]] ;then
     echo -n "${BOLD}${WHITE}What's the name of the CloudSQL instance? ${OFF}"
     read cloudsql_name
 
@@ -561,7 +561,7 @@ deploy2GCP()
 
   # deploy buildly using helm charts
   if [ "$use_cloudsql" != "${use_cloudsql#[Yy]}" ] ;then
-    deployBuildlyCore "GCP"
+    deployBuildlyCore "CloudSQL"
   else
     deployBuildlyCore
   fi
