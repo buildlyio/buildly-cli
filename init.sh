@@ -362,7 +362,6 @@ deployBuildlyCore()
   cd "helm-charts/buildly-core-chart" || return
   # install to minikube via helm
   if [[ -n "$1" && ("$1" == "GCP" || "$1" == "gcp") ]] ;then
-    # TODO: Ask user if he/she is using CloudSQL for buildly core
     echo -n "${BOLD}${WHITE}What's the name of the CloudSQL instance? ${OFF}"
     read cloudsql_name
 
@@ -466,7 +465,43 @@ deploy2Docker()
 
 deploy2AWS()
 {
-  echo "AWS ok....good luck with that!"
+  # Check specific dependencies
+  type aws >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'AWS CLI' installed.
+  Check the documentation of how to install it: https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html"; exit 1; }
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+
+  echo "AWS hosted Kubernetes... ok let's go!"
+  echo "Let's make sure you have your AWS configs ready..."
+  # init and auth to AWS
+  if [ -f  ~/.aws/credentials ] && [ -f ~/.aws/config ]; then
+    echo "You must configure your AWS CLI first."
+    aws configure
+  fi
+
+  # define which kubernetes cluster will be used
+  echo -n "${BOLD}${WHITE}Enter the name of your AWS Kubernetes cluster: ${OFF}"
+  read k8s_cluster_name
+
+  echo -n "${BOLD}${WHITE}Type the name of the region(e.g, us-east): ${OFF}"
+  read region_name
+
+  # generate kubeconfig file and switch context of kubectl
+  aws eks --region "$region_name" update-kubeconfig --name "$k8s_cluster_name"
+  contexts=$(kubectl config get-contexts)
+  if [[ ! ( $contexts == *"$k8s_cluster_name"*) ]]; then
+    MSG="Your cluster isn't available via \"kubectl\". Make sure your AWS CLI and kubeconfig are well configured."
+    print_message "error" "$MSG"
+  fi
+
+  # deploy buildly using helm charts
+  deployBuildlyCore
+
+  echo "Done! Your Buildly Core application is up and running in \"$k8s_cluster_name\"."
+  MSG="Services need to have a container image available on internet via a registry to be deployed to Kubernetes.
+      If you decide to have your own registry, check the following K8S tutorial of how to pull an image from a
+      private registry: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+  print_message "info" "$MSG"
 }
 
 deploy2GCP()
@@ -516,7 +551,7 @@ deploy2GCP()
   gcloud container clusters get-credentials "$k8s_cluster_name" "--$cluster_type" "$zone_region" --project "$project"
   contexts=$(kubectl config get-contexts)
   if [[ ! ( $contexts == *"$k8s_cluster_name"*) ]]; then
-    MSG="Your cluster isn't available via \"kubectl\". Make sure your DO CLI and kubeconfig are well configured."
+    MSG="Your cluster isn't available via \"kubectl\". Make sure your GCP CLI and kubeconfig are well configured."
     print_message "error" "$MSG"
   fi
 
@@ -590,7 +625,7 @@ deploy2Provider()
     deploy2Docker
     ;;
     *)
-    MSG="The specified provider \"$1\" wasn't implemented yet"
+    MSG="The specified provider \"$1\" isn't implemented yet"
     print_message "error" "$MSG"
   esac
 }
