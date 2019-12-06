@@ -185,42 +185,6 @@ createDjangoService()
   )
 }
 
-# method to create Express services from scratch using Express wizard
-createExpressService()
-{
-  # Check specific dependencies
-  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
-  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
-
-  if [ ! -d express-service-wizard ]; then
-    MSG="The Express service wizard \"express-service-wizard\" wasn't found"
-    print_message "error" "$MSG"
-  fi
-
-  (
-  cd "express-service-wizard" || return
-  docker-compose run --rm express_service_wizard || echo "Docker not configured, installed or running"
-  )
-}
-
-# method to create Ruby on Rails services from scratch using Rails wizard
-createRailsService()
-{
-  # Check specific dependencies
-  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
-  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
-
-  if [ ! -d rails-service-wizard ]; then
-    MSG="The Ruby on Rails service wizard \"rails-service-wizard\" wasn't found"
-    print_message "error" "$MSG"
-  fi
-
-  (
-  cd "rails-service-wizard" || return
-  docker-compose run web rails new YourRailsApplication --force --no-deps --database=postgresql || echo "Docker not configured, installed or running"
-  )
-}
-
 # method to create new applications
 createApplication()
 {
@@ -309,6 +273,52 @@ setupServices()
   # Check specific dependencies
   type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
   Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
+
+  eval $(minikube docker-env)
+  if [[ -n "$1" && ("$1" == "buildly") ]] ;then
+    # check if buildly core folder exists inside of application's folder
+    if [ ! -d YourApplication/buildly-core ]; then
+      MSG="The application folder \"YourApplication/buildly-core\" doesn't exist"
+      print_message "error" "$MSG"
+    fi
+
+    # build buildly core
+    (
+    cd YourApplication/buildly-core || return
+    docker build . -t "buildly-core:latest" || exit
+    )
+  else
+    # check if service folder exists inside of application's folder
+    if [ ! -d YourApplication/services ]; then
+      MSG="The application folder \"YourApplication/services\" doesn't exist"
+      print_message "error" "$MSG"
+    fi
+
+    (
+    cd "YourApplication/services" || return
+    # loop through all services and build their images
+    ls | while IFS= read -r service
+    do
+      (
+      cd $service || exit
+      cleanedService=$(echo "$service" | tr "[:punct:]" -)
+      # build a local image
+      docker build . -t "${cleanedService}:latest" || exit
+      )
+    done
+    )
+  fi
+}
+
+##############################################################################
+#
+# Deploy functions
+#
+##############################################################################
+
+deployServices()
+{
+  # Check specific dependencies
   type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
   Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
 
@@ -320,27 +330,15 @@ setupServices()
 
   (
   cd "YourApplication/services" || return
-  eval $(minikube docker-env)
   # loop through all services and build their images
   ls | while IFS= read -r service
   do
-    (
-    cd $service || exit
-    cleanedService=$(echo "$service" | tr "[:punct:]" -)
-    # build a local image
-    docker build . -t "${cleanedService}:latest" || exit
     # deploy to kubectl
+    cleanedService=$(echo "$service" | tr "[:punct:]" -)
     kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
-    )
   done
   )
 }
-
-##############################################################################
-#
-# Deploy functions
-#
-##############################################################################
 
 deployBuildlyCore()
 {
@@ -349,7 +347,7 @@ deployBuildlyCore()
   fi
   # create buildly namespace
   kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
-  echo "Configure your buildly core to connect to a Database..."
+  echo "${BOLD}${WHITE}Configure your Buildly Core to connect to a Database...${OFF}"
   echo -n "Enter host name or IP: "
   read dbhost
   echo -n "Enter Database Port: "
@@ -363,7 +361,7 @@ deployBuildlyCore()
   setupHelm
   cd "helm-charts/buildly-core-chart" || return
   # install to minikube via helm
-  if [ -n "$1" ] && [ "$1" == "GCP" ] ;then
+  if [[ -n "$1" && ("$1" == "CloudSQL" || "$1" == "cloudsql") ]] ;then
     echo -n "${BOLD}${WHITE}What's the name of the CloudSQL instance? ${OFF}"
     read cloudsql_name
 
@@ -390,6 +388,15 @@ deployBuildlyCore()
     --set gcp.cloudsql.project_id="$cloudsql_project" \
     --set gcp.cloudsql.region="$cloudsql_region" \
     --set gcp.cloudsql.secretName="$cloudsql_secret"
+  elif [[ -n "$1" && ("$1" == "minikube" || "$1" == "Minikube") ]] ;then
+    helm install buildly-core . --namespace buildly \
+    --set configmap.data.DATABASE_HOST="$dbhost" \
+    --set configmap.data.DATABASE_PORT=\""$dbport"\" \
+    --set secret.data.DATABASE_USER="$dbuser" \
+    --set secret.data.DATABASE_PASSWORD="$dbpass" \
+    --set buildly.image.repository=buildly-core \
+    --set buildly.image.version=latest \
+    --set buildly.image.pullPolicy=IfNotPresent
   else
     helm install . --name buildly-core --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
@@ -405,11 +412,13 @@ deploy2Minikube()
   # start mini kube if not already
   setupMinikube
 
-  # deploy buildly using helm charts
-  deployBuildlyCore
-
-  # build local images for each service
+  # build images for each service and buildly core
+  setupServices "buildly"
   setupServices
+
+  # deploy buildly and services to a minikube instance
+  deployBuildlyCore "minikube"
+  deployServices
 }
 
 deploy2Docker()
@@ -456,7 +465,43 @@ deploy2Docker()
 
 deploy2AWS()
 {
-  echo "AWS ok....good luck with that!"
+  # Check specific dependencies
+  type aws >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'AWS CLI' installed.
+  Check the documentation of how to install it: https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html"; exit 1; }
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+
+  echo "AWS hosted Kubernetes... ok let's go!"
+  echo "Let's make sure you have your AWS configs ready..."
+  # init and auth to AWS
+  if [ -f  ~/.aws/credentials ] && [ -f ~/.aws/config ]; then
+    echo "You must configure your AWS CLI first."
+    aws configure
+  fi
+
+  # define which kubernetes cluster will be used
+  echo -n "${BOLD}${WHITE}Enter the name of your AWS Kubernetes cluster: ${OFF}"
+  read k8s_cluster_name
+
+  echo -n "${BOLD}${WHITE}Type the name of the region(e.g, us-east): ${OFF}"
+  read region_name
+
+  # generate kubeconfig file and switch context of kubectl
+  aws eks --region "$region_name" update-kubeconfig --name "$k8s_cluster_name"
+  contexts=$(kubectl config get-contexts)
+  if [[ ! ( $contexts == *"$k8s_cluster_name"*) ]]; then
+    MSG="Your cluster isn't available via \"kubectl\". Make sure your AWS CLI and kubeconfig are well configured."
+    print_message "error" "$MSG"
+  fi
+
+  # deploy buildly using helm charts
+  deployBuildlyCore
+
+  echo "Done! Your Buildly Core application is up and running in \"$k8s_cluster_name\"."
+  MSG="Services need to have a container image available on internet via a registry to be deployed to Kubernetes.
+      If you decide to have your own registry, check the following K8S tutorial of how to pull an image from a
+      private registry: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+  print_message "info" "$MSG"
 }
 
 deploy2GCP()
@@ -506,7 +551,7 @@ deploy2GCP()
   gcloud container clusters get-credentials "$k8s_cluster_name" "--$cluster_type" "$zone_region" --project "$project"
   contexts=$(kubectl config get-contexts)
   if [[ ! ( $contexts == *"$k8s_cluster_name"*) ]]; then
-    MSG="Your cluster isn't available via \"kubectl\". Make sure your DO CLI and kubeconfig are well configured."
+    MSG="Your cluster isn't available via \"kubectl\". Make sure your GCP CLI and kubeconfig are well configured."
     print_message "error" "$MSG"
   fi
 
@@ -516,7 +561,7 @@ deploy2GCP()
 
   # deploy buildly using helm charts
   if [ "$use_cloudsql" != "${use_cloudsql#[Yy]}" ] ;then
-    deployBuildlyCore "GCP"
+    deployBuildlyCore "CloudSQL"
   else
     deployBuildlyCore
   fi
@@ -580,7 +625,7 @@ deploy2Provider()
     deploy2Docker
     ;;
     *)
-    MSG="The specified provider \"$1\" wasn't implemented yet"
+    MSG="The specified provider \"$1\" isn't implemented yet"
     print_message "error" "$MSG"
   esac
 }
@@ -595,7 +640,7 @@ print_message() {
     echo -e "${BLUE}INFO: $2${OFF}"
   elif [ "$1" == "warn" ]; then
     echo -e "${YELLOW}WARN: $2${OFF}"
-  else
+  elif [ "$1" == "error" ]; then
     echo -e "${RED}ERROR: $2${OFF}"
     exit 1
   fi
@@ -621,6 +666,13 @@ print_help() {
 cat <<EOF
 
 ${BOLD}${WHITE}Buildly CLI 0.0.1${OFF}
+
+If it's your first time using this tool, you probably want to create an application,
+so you can just execute this script with the option --create-application or -ca, e.g,
+
+'''
+$script_name --create-application
+'''
 
 ${BOLD}${WHITE}Usage${OFF}
 
@@ -766,8 +818,9 @@ esac
 done
 
 if [[ -z "$action" ]]; then
-  MSG="No action specified!"
-  print_message "error" "$MSG"
+  MSG="Usage: $script_name [OPTION]\nTry '$script_name --help' for more information."
+  echo -e "$MSG"
+  exit 0
 fi
 
 # call function based on the action
