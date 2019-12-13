@@ -653,7 +653,7 @@ print_message() {
 ##############################################################################
 print_version() {
     echo ""
-    echo -e "${BOLD}Buildly CLI 0.0.1${OFF}"
+    echo -e "${BOLD}Buildly CLI 0.0.4${OFF}"
     echo ""
 }
 
@@ -665,7 +665,7 @@ print_version() {
 print_help() {
 cat <<EOF
 
-${BOLD}${WHITE}Buildly CLI 0.0.1${OFF}
+${BOLD}${WHITE}Buildly CLI 0.0.4${OFF}
 
 If it's your first time using this tool, you probably want to create an application,
 so you can just execute this script with the option --create-application or -ca, e.g,
@@ -713,7 +713,7 @@ echo " " | column -t -s ';'
 ##############################################################################
 print_about() {
     echo ""
-    echo -e "${BOLD}${WHITE}Buildly CLI 0.0.1${OFF}"
+    echo -e "${BOLD}${WHITE}Buildly CLI 0.0.4${OFF}"
     echo ""
     echo -e "License: GPL-3.0"
     echo -e "Contact: team@buildly.io"
