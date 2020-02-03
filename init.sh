@@ -75,6 +75,65 @@ buildly_mkt_path="Buildly-Marketplace"
 
 ###############################################################################
 #
+# Create Service Functions
+#
+###############################################################################
+
+createService()
+{
+  case $1 in
+    django|Django)
+    createDjangoService
+    ;;
+    express|Express)
+    createExpressService
+    ;;
+    *)
+    MSG="The specified framework \"$1\" isn't implemented yet"
+    print_message "error" "$MSG"
+  esac
+}
+
+# method to create django services from scratch using django wizard
+createDjangoService()
+{
+  # Check specific dependencies
+  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
+  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
+
+  if [ ! -d django-service-wizard ]; then
+    MSG="The Django service wizard \"django-service-wizard\" wasn't found"
+    print_message "error" "$MSG"
+  fi
+
+  (
+  cd "django-service-wizard" || return
+  # create a new service use django-service-wizard for now
+  docker-compose run --rm django_service_wizard -u "$(id -u):$(id -g)" -v "$(pwd)":/code || echo "Docker not configured, installed or running"
+  )
+}
+
+# method to create django services from scratch using django wizard
+createExpressService()
+{
+  # Check specific dependencies
+  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
+  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
+
+  if [ ! -d express-service-wizard ]; then
+    MSG="The Express service wizard \"express-service-wizard\" wasn't found"
+    print_message "error" "$MSG"
+  fi
+
+  (
+  cd "express-service-wizard" || return
+  # create a new service use express-service-wizard for now
+  docker-compose run --rm express_service_wizard || echo "Docker not configured, installed or running"
+  )
+}
+
+###############################################################################
+#
 # Global Functions
 #
 ###############################################################################
@@ -166,25 +225,6 @@ cloneMktpService()
   git clone "$github_url/$buildly_mkt_path/$1.git" "YourApplication/services/$1";
 }
 
-# method to create django services from scratch using django wizard
-createDjangoService()
-{
-  # Check specific dependencies
-  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
-  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
-
-  if [ ! -d django-service-wizard ]; then
-    MSG="The Django service wizard \"django-service-wizard\" wasn't found"
-    print_message "error" "$MSG"
-  fi
-
-  (
-  cd "django-service-wizard" || return
-  # create a new service use django-service-wizard for now
-  docker-compose run --rm django_service_wizard -u "$(id -u):$(id -g)" -v "$(pwd)":/code || echo "Docker not configured, installed or running"
-  )
-}
-
 # method to create new applications
 createApplication()
 {
@@ -232,7 +272,9 @@ createApplication()
     read scratch_service_answer
 
     if [ "$scratch_service_answer" != "${scratch_service_answer#[Yy]}" ] ;then
-      createDjangoService
+      echo -n "${BOLD}${WHITE}Which framework would you like to use? Django or Express ${OFF}"
+      read framework_name
+      createService "$framework_name"
     else
       break
     fi
@@ -793,7 +835,7 @@ case $key in
   ;;
   -cs|--create-service)
   get_framework=true
-  action="createDjangoService"
+  action="createService"
   ;;
   -d2m|--deploy-minikube)
   action="deploy2Minikube"
@@ -838,12 +880,12 @@ case $action in
   fi
   cloneMktpService "$service_name"
   ;;
-  createDjangoService)
+  createService)
   if [[ -z "$framework_name" ]]; then
     MSG="No framework name specified!"
     print_message "error" "$MSG"
   fi
-  createDjangoService "$framework_name"
+  createService "$framework_name"
   ;;
   deploy2Minikube)
   deploy2Provider "Minikube"
