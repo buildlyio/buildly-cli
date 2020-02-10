@@ -419,7 +419,7 @@ deployBuildlyCore()
     echo -n "${BOLD}${WHITE}What's the name of the secret that holds the CloudSQL credentials? ${OFF}"
     read cloudsql_secret
 
-    helm install . --name buildly-core --namespace buildly \
+    helm install buildly-core . --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
     --set configmap.data.DATABASE_PORT=\""$dbport"\" \
     --set secret.data.DATABASE_USER="$dbuser" \
@@ -440,7 +440,7 @@ deployBuildlyCore()
     --set buildly.image.version=latest \
     --set buildly.image.pullPolicy=IfNotPresent
   else
-    helm install . --name buildly-core --namespace buildly \
+    helm install buildly-core . --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
     --set configmap.data.DATABASE_PORT=\""$dbport"\" \
     --set secret.data.DATABASE_USER="$dbuser" \
