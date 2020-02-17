@@ -399,6 +399,11 @@ deployBuildlyCore()
   echo -n "Enter Database Password: "
   read dbpass
 
+  if [[ -z "$dbhost" && -z "$dbport" && -z "$dbuser" && -z "$dbpass" ]]; then
+    MSG="A database connection info (Hostname/IP, Port, Username, and Password) has to be provided."
+    print_message "error" "$MSG"
+  fi
+
   (
   setupHelm
   cd "helm-charts/buildly-core-chart" || return
