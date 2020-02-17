@@ -101,8 +101,15 @@ createDjangoService()
   type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
   Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
 
+  # check if folder exists
   if [ ! -d django-service-wizard ]; then
     MSG="The Django service wizard \"django-service-wizard\" wasn't found"
+    print_message "error" "$MSG"
+  fi
+
+  # check if sub-module was pulled
+  if [ ! "$(ls -A "django-service-wizard")" ]; then
+    MSG="The Django service wizard \"django-service-wizard\" wasn't found.\nPlease pull sub-modules using the following git command: 'git pull --recurse-submodules'"
     print_message "error" "$MSG"
   fi
 
@@ -120,8 +127,15 @@ createExpressService()
   type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
   Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
 
+  # check if folder exists
   if [ ! -d express-service-wizard ]; then
     MSG="The Express service wizard \"express-service-wizard\" wasn't found"
+    print_message "error" "$MSG"
+  fi
+
+  # check if sub-module was pulled
+  if [ ! "$(ls -A "express-service-wizard")" ]; then
+    MSG="The Django service wizard \"django-service-wizard\" wasn't found.\nPlease pull sub-modules using the following git command: 'git pull --recurse-submodules'"
     print_message "error" "$MSG"
   fi
 
