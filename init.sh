@@ -331,39 +331,25 @@ setupServices()
   Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
 
   eval $(minikube docker-env)
-  if [[ -n "$1" && ("$1" == "buildly") ]] ;then
-    # check if buildly core folder exists inside of application's folder
-    if [ ! -d YourApplication/buildly-core ]; then
-      MSG="The application folder \"YourApplication/buildly-core\" doesn't exist"
-      print_message "error" "$MSG"
-    fi
-
-    # build buildly core
-    (
-    cd YourApplication/buildly-core || return
-    docker build . -t "buildly-core:latest" || exit
-    )
-  else
-    # check if service folder exists inside of application's folder
-    if [ ! -d YourApplication/services ]; then
-      MSG="The application folder \"YourApplication/services\" doesn't exist"
-      print_message "error" "$MSG"
-    fi
-
-    (
-    cd "YourApplication/services" || return
-    # loop through all services and build their images
-    ls | while IFS= read -r service
-    do
-      (
-      cd $service || exit
-      cleanedService=$(echo "$service" | tr "[:punct:]" -)
-      # build a local image
-      docker build . -t "${cleanedService}:latest" || exit
-      )
-    done
-    )
+  # check if service folder exists inside of application's folder
+  if [ ! -d YourApplication/services ]; then
+    MSG="The application folder \"YourApplication/services\" doesn't exist"
+    print_message "error" "$MSG"
   fi
+
+  (
+  cd "YourApplication/services" || return
+  # loop through all services and build their images
+  ls | while IFS= read -r service
+  do
+    (
+    cd $service || exit
+    cleanedService=$(echo "$service" | tr "[:punct:]" -)
+    # build a local image
+    docker build . -t "${cleanedService}:latest" || exit
+    )
+  done
+  )
 }
 
 ##############################################################################
@@ -474,7 +460,6 @@ deploy2Minikube()
   setupMinikube
 
   # build images for each service and buildly core
-  setupServices "buildly"
   setupServices
 
   # deploy buildly and services to a minikube instance
