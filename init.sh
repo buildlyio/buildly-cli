@@ -389,15 +389,28 @@ deployBuildlyCore()
   fi
   # create buildly namespace
   kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
-  echo "${BOLD}${WHITE}Configure your Buildly Core to connect to a Database...${OFF}"
-  echo -n "Enter host name or IP: "
-  read dbhost
-  echo -n "Enter Database Port: "
-  read dbport
-  echo -n "Enter Database Username: "
-  read dbuser
-  echo -n "Enter Database Password: "
-  read dbpass
+
+  if [[ -n "$1" && ("$1" == "minikube" || "$1" == "Minikube") ]] ;then
+    helm install db-buildly \
+    --set postgresqlPassword=root,postgresqlDatabase=buildly,postgresqlUsername=root,servicePort=5432 \
+      stable/postgresql --namespace buildly
+
+    # set database configuration up
+    dbhost=db-buildly-postgresql.buildly.cluster.local
+    dbport=5432
+    dbuser=root
+    dbpass=root
+  else
+    echo "${BOLD}${WHITE}Configure your Buildly Core to connect to a Database...${OFF}"
+    echo -n "Enter host name or IP: "
+    read dbhost
+    echo -n "Enter Database Port: "
+    read dbport
+    echo -n "Enter Database Username: "
+    read dbuser
+    echo -n "Enter Database Password: "
+    read dbpass
+  fi
 
   if [[ -z "$dbhost" && -z "$dbport" && -z "$dbuser" && -z "$dbpass" ]]; then
     MSG="A database connection info (Hostname/IP, Port, Username, and Password) has to be provided."
