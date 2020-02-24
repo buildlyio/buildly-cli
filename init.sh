@@ -352,6 +352,26 @@ setupServices()
   )
 }
 
+connectService2Buildly()
+{
+  # Check specific dependencies
+  type kubectl >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'K8S CLI' installed.
+  Check the documentation of how to install it: https://kubernetes.io/docs/tasks/tools/install-kubectl/"; exit 1; }
+
+  # define attributes of logic module
+  service_uuid=$(uuidgen)
+  service_name=$(echo "$1" | tr -d "[:punct:]")
+  endpoint="http://$1.buildly.svc.cluster.local:$2"
+  endpoint_name=$(cut -d'-' -f1 <<<"$1")
+
+  # create db insert query and perform it
+  insert_query="INSERT INTO core_logicmodule (module_uuid, name, endpoint, endpoint_name) VALUES ('$service_uuid', '$service_name', '$endpoint', '$endpoint_name');"
+
+  kubectl run db-buildly-postgresql-client --rm --tty -i --restart='Never' --namespace buildly \
+  --image docker.io/bitnami/postgresql:11.7.0-debian-10-r0 --env="PGPASSWORD=root" --command -- \
+  psql --host db-buildly-postgresql -U postgres -d buildly -p 5432 -c "$insert_query"
+}
+
 ##############################################################################
 #
 # Deploy functions
@@ -444,12 +464,14 @@ deployServices()
     --env="SECRET_KEY=test" \
     --namespace buildly
 
-    echo -e "${BOLD}${WHITE}Let's expose the service internally!${OFF}"
+    echo -e "${BOLD}${WHITE}Let's expose the service internally, so Buildly Core can connect to it!${OFF}"
     echo -n "Enter the service inbound port: "
     read inbount_port
     echo -n "Enter the service outbound port: "
     read outbount_port
-    kubectl expose deploy $cleanedService --port=$outbount_port --target-port=$inbount_port --namespace buildly
+    kubectl expose deploy "$cleanedService" --port="$outbount_port" --target-port="$inbount_port" --namespace buildly
+
+    connectService2Buildly "$cleanedService" "$outbount_port"
   done
   )
 }
@@ -549,7 +571,7 @@ deploy2Minikube()
 ${BOLD}${WHITE}To access your Buildly Core run the following command: ${OFF}
 
 '''
-kubectl port-forward --namespace buildly svc/buildly-core-service
+kubectl port-forward service/buildly-core-service 8080:8080 --namespace buildly
 '''
 
 ${BOLD}${WHITE}and then open your browser with URL${OFF} 'http://127.0.0.1:8080'
