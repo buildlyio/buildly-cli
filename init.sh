@@ -443,6 +443,13 @@ deployServices()
     --env="$dbpass_env_var=$dbpass" \
     --env="SECRET_KEY=test" \
     --namespace buildly
+
+    echo -e "${BOLD}${WHITE}Let's expose the service internally!${OFF}"
+    echo -n "Enter the service inbound port: "
+    read inbount_port
+    echo -n "Enter the service outbound port: "
+    read outbount_port
+    kubectl expose deploy $cleanedService --port=$outbount_port --target-port=$inbount_port --namespace buildly
   done
   )
 }
