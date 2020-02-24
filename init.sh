@@ -392,14 +392,14 @@ deployBuildlyCore()
 
   if [[ -n "$1" && ("$1" == "minikube" || "$1" == "Minikube") ]] ;then
     helm install db-buildly \
-    --set postgresqlPassword=root,postgresqlDatabase=buildly,postgresqlUsername=root,servicePort=5432 \
+    --set postgresqlPassword=root,postgresqlDatabase=buildly,servicePort=5432 \
       stable/postgresql --namespace buildly
 
     # set database configuration up
-    dbhost=db-buildly-postgresql.buildly.cluster.local
+    dbhost=db-buildly-postgresql.buildly.svc.cluster.local
     dbport=5432
-    dbuser=root
-    dbpass=root
+    dbuser=$(echo -n "postgres" | base64)
+    dbpass=$(echo -n "root" | base64)
   else
     echo "${BOLD}${WHITE}Configure your Buildly Core to connect to a Database...${OFF}"
     echo -n "Enter host name or IP: "
@@ -408,8 +408,10 @@ deployBuildlyCore()
     read dbport
     echo -n "Enter Database Username: "
     read dbuser
+    dbuser=$(echo "$dbuser" | base64)
     echo -n "Enter Database Password: "
     read dbpass
+    dbpass=$(echo "$dbpass" | base64)
   fi
 
   if [[ -z "$dbhost" && -z "$dbport" && -z "$dbuser" && -z "$dbpass" ]]; then
@@ -439,7 +441,7 @@ deployBuildlyCore()
 
     helm install buildly-core . --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
-    --set configmap.data.DATABASE_PORT=\""$dbport"\" \
+    --set-string configmap.data.DATABASE_PORT="$dbport" \
     --set secret.data.DATABASE_USER="$dbuser" \
     --set secret.data.DATABASE_PASSWORD="$dbpass" \
     --set gcp.enable="True" \
@@ -448,19 +450,10 @@ deployBuildlyCore()
     --set gcp.cloudsql.project_id="$cloudsql_project" \
     --set gcp.cloudsql.region="$cloudsql_region" \
     --set gcp.cloudsql.secretName="$cloudsql_secret"
-  elif [[ -n "$1" && ("$1" == "minikube" || "$1" == "Minikube") ]] ;then
-    helm install buildly-core . --namespace buildly \
-    --set configmap.data.DATABASE_HOST="$dbhost" \
-    --set configmap.data.DATABASE_PORT=\""$dbport"\" \
-    --set secret.data.DATABASE_USER="$dbuser" \
-    --set secret.data.DATABASE_PASSWORD="$dbpass" \
-    --set buildly.image.repository=buildly-core \
-    --set buildly.image.version=latest \
-    --set buildly.image.pullPolicy=IfNotPresent
   else
     helm install buildly-core . --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
-    --set configmap.data.DATABASE_PORT=\""$dbport"\" \
+    --set-string configmap.data.DATABASE_PORT="$dbport" \
     --set secret.data.DATABASE_USER="$dbuser" \
     --set secret.data.DATABASE_PASSWORD="$dbpass"
   fi
@@ -478,6 +471,18 @@ deploy2Minikube()
   # deploy buildly and services to a minikube instance
   deployBuildlyCore "minikube"
   deployServices
+
+  # information about how to access Buildly from minikube
+  cat <<EOF
+${BOLD}${WHITE}To access your Buildly Core run the following command: ${OFF}
+
+'''
+kubectl port-forward --namespace buildly svc/buildly-core-service
+'''
+
+${BOLD}${WHITE}and then open your browser with URL${OFF} 'http://127.0.0.1:8080'
+
+EOF
 }
 
 deploy2Docker()
