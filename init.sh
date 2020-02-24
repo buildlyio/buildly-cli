@@ -372,12 +372,77 @@ deployServices()
 
   (
   cd "YourApplication/services" || return
-  # loop through all services and build their images
-  ls | while IFS= read -r service
+  # loop through all services and deploy them
+  services=(*)
+  for service in "${services[@]}"
   do
-    # deploy to kubectl
+    # clean the service name
     cleanedService=$(echo "$service" | tr "[:punct:]" -)
-    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never -n buildly
+
+    echo -n "${BOLD}${WHITE}Does the service ${OFF}${BOLD}${CYAN}\"$service\"${OFF}${BOLD}${WHITE} need a PostgreSQL DB? Yes [Y/y] or No [N/n] ${OFF}"
+    read use_database
+    if [ "$use_database" != "${use_database#[Yy]}" ] ;then
+      if [[ -n "$1" && ("$1" == "minikube" || "$1" == "Minikube") ]] ;then
+        # create a database for the service
+        cleanDBName=$(echo "$service" | tr "[:punct:]" _)
+
+        kubectl run db-buildly-postgresql-client --rm --tty -i --restart='Never' --namespace buildly \
+        --image docker.io/bitnami/postgresql:11.7.0-debian-10-r0 --env="PGPASSWORD=root" --command -- \
+        psql --host db-buildly-postgresql -U postgres -d buildly -p 5432 -c "CREATE DATABASE $cleanDBName;"
+
+        dbname=$cleanDBName
+        dbhost=db-buildly-postgresql.buildly.svc.cluster.local
+        dbport=5432
+        dbuser=postgres
+        dbpass=root
+      else
+        echo "${BOLD}${WHITE}Configure your Service to connect to a Database...${OFF}"
+        echo -n "Enter host name or IP: "
+        read dbhost
+        echo -n "Enter Database Port: "
+        read dbport
+        echo -n "Enter Database Name: "
+        read dbname
+        echo -n "Enter Database Username: "
+        read dbuser
+        echo -n "Enter Database Password: "
+        read dbpass
+      fi
+
+      echo -n "${BOLD}${WHITE}Is this service using the default database environment variables (DATABASE_HOST, DATABASE_PORT, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD)? Yes [Y/y] or No [N/n] ${OFF}"
+      read default_env_vars
+      if [ "$default_env_vars" != "${default_env_vars#[Yy]}" ] ;then
+        dbhost_env_var=DATABASE_HOST
+        dbport_env_var=DATABASE_PORT
+        dbname_env_var=DATABASE_NAME
+        dbuser_env_var=DATABASE_USER
+        dbpass_env_var=DATABASE_PASSWORD
+      else
+        # ask for the database env var names
+        echo -n "Enter the name of the DB Host environment variable: "
+        read dbhost_env_var
+        echo -n "Enter the name of the DB Port environment variable: "
+        read dbport_env_var
+        echo -n "Enter the name of the DB Name environment variable: "
+        read dbname_env_var
+        echo -n "Enter the name of the DB User environment variable: "
+        read dbuser_env_var
+        echo -n "Enter the name of the DB Password environment variable: "
+        read dbpass_env_var
+      fi
+    fi
+
+    kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never \
+    --env="ALLOWED_HOSTS=*" \
+    --env="CORS_ORIGIN_WHITELIST=*" \
+    --env="DATABASE_ENGINE=postgresql" \
+    --env="$dbhost_env_var=$dbhost" \
+    --env="$dbport_env_var=$dbport" \
+    --env="$dbname_env_var=$dbname" \
+    --env="$dbuser_env_var=$dbuser" \
+    --env="$dbpass_env_var=$dbpass" \
+    --env="SECRET_KEY=test" \
+    --namespace buildly
   done
   )
 }
@@ -470,7 +535,7 @@ deploy2Minikube()
 
   # deploy buildly and services to a minikube instance
   deployBuildlyCore "minikube"
-  deployServices
+  deployServices "minikube"
 
   # information about how to access Buildly from minikube
   cat <<EOF
