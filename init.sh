@@ -487,7 +487,7 @@ deployBuildlyCore()
   if [[ -n "$1" && ("$1" == "minikube" || "$1" == "Minikube") ]] ;then
     helm install db-buildly \
     --set postgresqlPassword=root,postgresqlDatabase=buildly,servicePort=5432 \
-      stable/postgresql --namespace buildly
+      bitnami/postgresql --namespace buildly
 
     # set database configuration up
     dbhost=db-buildly-postgresql.buildly.svc.cluster.local
