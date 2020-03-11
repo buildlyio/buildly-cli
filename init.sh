@@ -210,7 +210,7 @@ setupBuildlyCore()
         sed 's/users//g' buildly-core/buildly/settings/base-buildly.py > buildly-core/buildly/settings/base-buildly.py
     fi
 
-    echo -n "${BOLD}${WHITE}Would you like to use Templates to manage reuseable workflows with Buildly? Yes [Y/y] or No [N/n] ${OFF}"
+    echo -n "${BOLD}${WHITE}Would you like to use Templates to manage reusable workflows with Buildly? Yes [Y/y] or No [N/n] ${OFF}"
     read templates
 
     if [ "$templates" != "${templates#[Nn]}" ] ;then
