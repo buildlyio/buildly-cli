@@ -485,9 +485,10 @@ deployBuildlyCore()
   kubectl create namespace buildly || print_message "warn" "Namespace \"buildly\" already exists"
 
   if [[ -n "$1" && ("$1" == "minikube" || "$1" == "Minikube") ]] ;then
+    helm repo add bitnami	https://charts.bitnami.com/bitnami
     helm install db-buildly \
     --set postgresqlPassword=root,postgresqlDatabase=buildly,servicePort=5432 \
-      stable/postgresql --namespace buildly
+      bitnami/postgresql --namespace buildly
 
     # set database configuration up
     dbhost=db-buildly-postgresql.buildly.svc.cluster.local
