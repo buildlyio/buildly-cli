@@ -79,21 +79,6 @@ buildly_mkt_path="Buildly-Marketplace"
 #
 ###############################################################################
 
-createService()
-{
-  case $1 in
-    django|Django)
-    createDjangoService
-    ;;
-    express|Express)
-    createExpressService
-    ;;
-    *)
-    MSG="The specified framework \"$1\" isn't implemented yet"
-    print_message "error" "$MSG"
-  esac
-}
-
 # method to create django services from scratch using django wizard
 createDjangoService()
 {
@@ -148,7 +133,7 @@ createExpressService()
 
 ###############################################################################
 #
-# Global Functions
+# SetUp Functions
 #
 ###############################################################################
 
@@ -225,6 +210,40 @@ setupBuildlyCore()
     fi
   fi
 }
+
+setupServices()
+{
+  # Check specific dependencies
+  type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
+  Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
+
+  eval $(minikube docker-env)
+  # check if service folder exists inside of application's folder
+  if [ ! -d YourApplication/services ]; then
+    MSG="The application folder \"YourApplication/services\" doesn't exist"
+    print_message "error" "$MSG"
+  fi
+
+  (
+  cd "YourApplication/services" || return
+  # loop through all services and build their images
+  ls | while IFS= read -r service
+  do
+    (
+    cd $service || exit
+    cleanedService=$(echo "$service" | tr "[:punct:]" -)
+    # build a local image
+    docker build . -t "${cleanedService}:latest" || exit
+    )
+  done
+  )
+}
+
+###############################################################################
+#
+# Command Option Functions
+#
+###############################################################################
 
 # method to list services availables on Buildly Marketplace
 listMktpServices()
@@ -324,33 +343,52 @@ createApplication()
   fi
 }
 
-setupServices()
+# method to create service with specified framework
+createService()
 {
-  # Check specific dependencies
-  type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
-  Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
-
-  eval $(minikube docker-env)
-  # check if service folder exists inside of application's folder
-  if [ ! -d YourApplication/services ]; then
-    MSG="The application folder \"YourApplication/services\" doesn't exist"
+  case $1 in
+    django|Django)
+    createDjangoService
+    ;;
+    express|Express)
+    createExpressService
+    ;;
+    *)
+    MSG="The specified framework \"$1\" isn't implemented yet"
     print_message "error" "$MSG"
-  fi
-
-  (
-  cd "YourApplication/services" || return
-  # loop through all services and build their images
-  ls | while IFS= read -r service
-  do
-    (
-    cd $service || exit
-    cleanedService=$(echo "$service" | tr "[:punct:]" -)
-    # build a local image
-    docker build . -t "${cleanedService}:latest" || exit
-    )
-  done
-  )
+  esac
 }
+
+# method to create deploy app to specified provider
+deploy2Provider()
+{
+  case $1 in
+    aws|AWS)
+    deploy2AWS
+    ;;
+    do|DO)
+    deploy2DO
+    ;;
+    gcp|GCP)
+    deploy2GCP
+    ;;
+    minikube|Minikube)
+    deploy2Minikube
+    ;;
+    docker|Docker)
+    deploy2Docker
+    ;;
+    *)
+    MSG="The specified provider \"$1\" isn't implemented yet"
+    print_message "error" "$MSG"
+  esac
+}
+
+##############################################################################
+#
+# Connect to Buildly Core Functions
+#
+##############################################################################
 
 connectService2Buildly()
 {
@@ -374,7 +412,7 @@ connectService2Buildly()
 
 ##############################################################################
 #
-# Deploy functions
+# Deploy Functions
 #
 ##############################################################################
 
@@ -763,30 +801,6 @@ deploy2DO()
       If you decide to have your own registry, check the following K8S tutorial of how to pull an image from a
       private registry: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
   print_message "info" "$MSG"
-}
-
-deploy2Provider()
-{
-  case $1 in
-    aws|AWS)
-    deploy2AWS
-    ;;
-    do|DO)
-    deploy2DO
-    ;;
-    gcp|GCP)
-    deploy2GCP
-    ;;
-    minikube|Minikube)
-    deploy2Minikube
-    ;;
-    docker|Docker)
-    deploy2Docker
-    ;;
-    *)
-    MSG="The specified provider \"$1\" isn't implemented yet"
-    print_message "error" "$MSG"
-  esac
 }
 
 ##############################################################################
