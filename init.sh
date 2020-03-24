@@ -658,6 +658,8 @@ deploy2Docker()
     docker network connect buildly_test "$container_id"
   done <<< "$container_ids"
 
+  # information about how to access Buildly from Docker
+  echo -n "${BOLD}${WHITE}To access your Buildly Core, open the browser with the URL${OFF} 'http://127.0.0.1:8080'"
 }
 
 deploy2AWS()
