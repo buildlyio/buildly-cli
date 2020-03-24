@@ -449,6 +449,10 @@ deployServices()
   services=(*)
   for service in "${services[@]}"
   do
+    # do not loop for empty folder
+    if [ "$service" == "*" ]; then
+        break
+    fi
     # clean the service name
     cleanedService=$(echo "$service" | tr "[:punct:]" -)
 
