@@ -505,6 +505,7 @@ deployServices()
       fi
     fi
 
+    echo -e "${BOLD}${WHITE}Deploying Service \"$service\"...${OFF}"
     kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never \
     --env="ALLOWED_HOSTS=*" \
     --env="CORS_ORIGIN_WHITELIST=*" \
@@ -587,6 +588,7 @@ deployBuildlyCore()
     echo -n "${BOLD}${WHITE}What's the name of the secret that holds the CloudSQL credentials? ${OFF}"
     read cloudsql_secret
 
+    echo -e "${BOLD}${WHITE}Deploying Buildly Core...${OFF}"
     helm install buildly-core . --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
     --set-string configmap.data.DATABASE_PORT="$dbport" \
@@ -599,12 +601,30 @@ deployBuildlyCore()
     --set gcp.cloudsql.region="$cloudsql_region" \
     --set gcp.cloudsql.secretName="$cloudsql_secret"
   else
+    echo -e "${BOLD}${WHITE}Deploying Buildly Core...${OFF}"
     helm install buildly-core . --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
     --set-string configmap.data.DATABASE_PORT="$dbport" \
     --set secret.data.DATABASE_USER="$dbuser" \
     --set secret.data.DATABASE_PASSWORD="$dbpass"
   fi
+  )
+}
+
+deployBuildlyTemplate()
+{
+  if [ ! -d helm-charts/ ]; then
+    git clone $github_url/$buildly_helm_repo_path
+  fi
+
+  (
+  setupHelm
+  cd "helm-charts/buildly-template-chart" || return
+  echo -e "${BOLD}${WHITE}Deploying Buildly Template...${OFF}"
+  helm install buildly-template . --namespace buildly \
+  --set-string configmap.data.API_URL="http://localhost:8080/" \
+  --set-string configmap.data.OAUTH_TOKEN_URL="http://localhost:8080/oauth/token/" \
+  --set-string configmap.data.PRODUCTION="true"
   )
 }
 
@@ -619,16 +639,26 @@ deploy2Minikube()
   # deploy buildly and services to a minikube instance
   deployBuildlyCore "minikube"
   deployServices "minikube"
+  deployBuildlyTemplate
 
   # information about how to access Buildly from minikube
   cat <<EOF
-${BOLD}${WHITE}To access your Buildly Core run the following command: ${OFF}
+${BOLD}${BLUE}To access your Buildly Core run the following command: ${OFF}
 
 '''
 kubectl port-forward service/buildly-core-service 8080:8080 --namespace buildly
 '''
 
-${BOLD}${WHITE}and then open your browser with URL${OFF} 'http://127.0.0.1:8080'
+${BOLD}${BLUE}and then open your browser with URL${OFF} 'http://127.0.0.1:8080'
+
+${BOLD}${BLUE}To access your Buildly Template, first you need to run the command above and
+then in another tab of your terminal the following command:${OFF}
+
+'''
+kubectl port-forward service/buildly-template-service 9000:9000 --namespace buildly
+'''
+
+${BOLD}${BLUE}and then open your browser with URL${OFF} 'http://127.0.0.1:9000'
 
 EOF
 }
