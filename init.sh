@@ -70,6 +70,8 @@ provider_name=""
 github_url="https://github.com"
 github_api_url="https://api.github.com"
 buildly_core_repo_path="buildlyio/buildly-core.git"
+#buildly_angular_template_repo_path="buildlyio/buildly-angular-template.git"
+buildly_react_template_repo_path="buildlyio/buildly-react-template.git"
 buildly_helm_repo_path="buildlyio/helm-charts.git"
 buildly_mkt_path="Buildly-Marketplace"
 
@@ -211,6 +213,18 @@ setupBuildlyCore()
   fi
 }
 
+# method to clone buidly template into the application folder
+setupBuildlyTemplate()
+{
+  echo -n "${BOLD}${WHITE}Would you like to use Buildly React Template? Yes [Y/y] or No [N/n] ${OFF}"
+  read answer
+
+  if [ "$answer" != "${answer#[Yy]}" ] ;then
+    echo "Cloning Buildly Template"
+    git clone "$github_url/$buildly_react_template_repo_path" "buildly-react-template"
+  fi
+}
+
 setupServices()
 {
   # Check specific dependencies
@@ -281,6 +295,7 @@ createApplication()
   (
   cd YourApplication || exit
   setupBuildlyCore
+  setupBuildlyTemplate
   )
 
   # clone service repositories from GitHub
