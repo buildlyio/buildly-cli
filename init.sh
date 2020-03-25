@@ -70,6 +70,8 @@ provider_name=""
 github_url="https://github.com"
 github_api_url="https://api.github.com"
 buildly_core_repo_path="buildlyio/buildly-core.git"
+#buildly_angular_template_repo_path="buildlyio/buildly-angular-template.git"
+buildly_react_template_repo_path="buildlyio/buildly-react-template.git"
 buildly_helm_repo_path="buildlyio/helm-charts.git"
 buildly_mkt_path="Buildly-Marketplace"
 
@@ -78,21 +80,6 @@ buildly_mkt_path="Buildly-Marketplace"
 # Create Service Functions
 #
 ###############################################################################
-
-createService()
-{
-  case $1 in
-    django|Django)
-    createDjangoService
-    ;;
-    express|Express)
-    createExpressService
-    ;;
-    *)
-    MSG="The specified framework \"$1\" isn't implemented yet"
-    print_message "error" "$MSG"
-  esac
-}
 
 # method to create django services from scratch using django wizard
 createDjangoService()
@@ -148,7 +135,7 @@ createExpressService()
 
 ###############################################################################
 #
-# Global Functions
+# SetUp Functions
 #
 ###############################################################################
 
@@ -226,6 +213,52 @@ setupBuildlyCore()
   fi
 }
 
+# method to clone buidly template into the application folder
+setupBuildlyTemplate()
+{
+  echo -n "${BOLD}${WHITE}Would you like to use Buildly React Template? Yes [Y/y] or No [N/n] ${OFF}"
+  read answer
+
+  if [ "$answer" != "${answer#[Yy]}" ] ;then
+    echo "Cloning Buildly Template"
+    git clone "$github_url/$buildly_react_template_repo_path" "buildly-react-template"
+  fi
+}
+
+setupServices()
+{
+  # Check specific dependencies
+  type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
+  Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
+
+  eval $(minikube docker-env)
+  # check if service folder exists inside of application's folder
+  if [ ! -d YourApplication/services ]; then
+    MSG="The application folder \"YourApplication/services\" doesn't exist"
+    print_message "error" "$MSG"
+  fi
+
+  (
+  cd "YourApplication/services" || return
+  # loop through all services and build their images
+  ls | while IFS= read -r service
+  do
+    (
+    cd $service || exit
+    cleanedService=$(echo "$service" | tr "[:punct:]" -)
+    # build a local image
+    docker build . -t "${cleanedService}:latest" || exit
+    )
+  done
+  )
+}
+
+###############################################################################
+#
+# Command Option Functions
+#
+###############################################################################
+
 # method to list services availables on Buildly Marketplace
 listMktpServices()
 {
@@ -262,6 +295,7 @@ createApplication()
   (
   cd YourApplication || exit
   setupBuildlyCore
+  setupBuildlyTemplate
   )
 
   # clone service repositories from GitHub
@@ -324,33 +358,52 @@ createApplication()
   fi
 }
 
-setupServices()
+# method to create service with specified framework
+createService()
 {
-  # Check specific dependencies
-  type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
-  Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
-
-  eval $(minikube docker-env)
-  # check if service folder exists inside of application's folder
-  if [ ! -d YourApplication/services ]; then
-    MSG="The application folder \"YourApplication/services\" doesn't exist"
+  case $1 in
+    django|Django)
+    createDjangoService
+    ;;
+    express|Express)
+    createExpressService
+    ;;
+    *)
+    MSG="The specified framework \"$1\" isn't implemented yet"
     print_message "error" "$MSG"
-  fi
-
-  (
-  cd "YourApplication/services" || return
-  # loop through all services and build their images
-  ls | while IFS= read -r service
-  do
-    (
-    cd $service || exit
-    cleanedService=$(echo "$service" | tr "[:punct:]" -)
-    # build a local image
-    docker build . -t "${cleanedService}:latest" || exit
-    )
-  done
-  )
+  esac
 }
+
+# method to create deploy app to specified provider
+deploy2Provider()
+{
+  case $1 in
+    aws|AWS)
+    deploy2AWS
+    ;;
+    do|DO)
+    deploy2DO
+    ;;
+    gcp|GCP)
+    deploy2GCP
+    ;;
+    minikube|Minikube)
+    deploy2Minikube
+    ;;
+    docker|Docker)
+    deploy2Docker
+    ;;
+    *)
+    MSG="The specified provider \"$1\" isn't implemented yet"
+    print_message "error" "$MSG"
+  esac
+}
+
+##############################################################################
+#
+# Connect to Buildly Core Functions
+#
+##############################################################################
 
 connectService2Buildly()
 {
@@ -374,7 +427,7 @@ connectService2Buildly()
 
 ##############################################################################
 #
-# Deploy functions
+# Deploy Functions
 #
 ##############################################################################
 
@@ -396,6 +449,10 @@ deployServices()
   services=(*)
   for service in "${services[@]}"
   do
+    # do not loop for empty folder
+    if [ "$service" == "*" ]; then
+        break
+    fi
     # clean the service name
     cleanedService=$(echo "$service" | tr "[:punct:]" -)
 
@@ -452,6 +509,7 @@ deployServices()
       fi
     fi
 
+    echo -e "${BOLD}${WHITE}Deploying Service \"$service\"...${OFF}"
     kubectl run $cleanedService --image=$cleanedService --image-pull-policy=Never \
     --env="ALLOWED_HOSTS=*" \
     --env="CORS_ORIGIN_WHITELIST=*" \
@@ -534,6 +592,7 @@ deployBuildlyCore()
     echo -n "${BOLD}${WHITE}What's the name of the secret that holds the CloudSQL credentials? ${OFF}"
     read cloudsql_secret
 
+    echo -e "${BOLD}${WHITE}Deploying Buildly Core...${OFF}"
     helm install buildly-core . --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
     --set-string configmap.data.DATABASE_PORT="$dbport" \
@@ -546,12 +605,30 @@ deployBuildlyCore()
     --set gcp.cloudsql.region="$cloudsql_region" \
     --set gcp.cloudsql.secretName="$cloudsql_secret"
   else
+    echo -e "${BOLD}${WHITE}Deploying Buildly Core...${OFF}"
     helm install buildly-core . --namespace buildly \
     --set configmap.data.DATABASE_HOST="$dbhost" \
     --set-string configmap.data.DATABASE_PORT="$dbport" \
     --set secret.data.DATABASE_USER="$dbuser" \
     --set secret.data.DATABASE_PASSWORD="$dbpass"
   fi
+  )
+}
+
+deployBuildlyTemplate()
+{
+  if [ ! -d helm-charts/ ]; then
+    git clone $github_url/$buildly_helm_repo_path
+  fi
+
+  (
+  setupHelm
+  cd "helm-charts/buildly-template-chart" || return
+  echo -e "${BOLD}${WHITE}Deploying Buildly Template...${OFF}"
+  helm install buildly-template . --namespace buildly \
+  --set-string configmap.data.API_URL="http://localhost:8080/" \
+  --set-string configmap.data.OAUTH_TOKEN_URL="http://localhost:8080/oauth/token/" \
+  --set-string configmap.data.PRODUCTION="true"
   )
 }
 
@@ -566,16 +643,26 @@ deploy2Minikube()
   # deploy buildly and services to a minikube instance
   deployBuildlyCore "minikube"
   deployServices "minikube"
+  deployBuildlyTemplate
 
   # information about how to access Buildly from minikube
   cat <<EOF
-${BOLD}${WHITE}To access your Buildly Core run the following command: ${OFF}
+${BOLD}${BLUE}To access your Buildly Core run the following command: ${OFF}
 
 '''
 kubectl port-forward service/buildly-core-service 8080:8080 --namespace buildly
 '''
 
-${BOLD}${WHITE}and then open your browser with URL${OFF} 'http://127.0.0.1:8080'
+${BOLD}${BLUE}and then open your browser with URL${OFF} 'http://127.0.0.1:8080'
+
+${BOLD}${BLUE}To access your Buildly Template, first you need to run the command above and
+then in another tab of your terminal the following command:${OFF}
+
+'''
+kubectl port-forward service/buildly-template-service 9000:9000 --namespace buildly
+'''
+
+${BOLD}${BLUE}and then open your browser with URL${OFF} 'http://127.0.0.1:9000'
 
 EOF
 }
@@ -620,6 +707,8 @@ deploy2Docker()
     docker network connect buildly_test "$container_id"
   done <<< "$container_ids"
 
+  # information about how to access Buildly from Docker
+  echo -n "${BOLD}${WHITE}To access your Buildly Core, open the browser with the URL${OFF} 'http://127.0.0.1:8080'"
 }
 
 deploy2AWS()
@@ -763,30 +852,6 @@ deploy2DO()
       If you decide to have your own registry, check the following K8S tutorial of how to pull an image from a
       private registry: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
   print_message "info" "$MSG"
-}
-
-deploy2Provider()
-{
-  case $1 in
-    aws|AWS)
-    deploy2AWS
-    ;;
-    do|DO)
-    deploy2DO
-    ;;
-    gcp|GCP)
-    deploy2GCP
-    ;;
-    minikube|Minikube)
-    deploy2Minikube
-    ;;
-    docker|Docker)
-    deploy2Docker
-    ;;
-    *)
-    MSG="The specified provider \"$1\" isn't implemented yet"
-    print_message "error" "$MSG"
-  esac
 }
 
 ##############################################################################
