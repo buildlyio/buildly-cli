@@ -27,7 +27,11 @@ You might also need one or more of the following apps depending on the functiona
 
 ### Installing
 
-This repository has links to submodules.  To pull the latest changes from the submodules use:
+This repository has links to submodules.  
+After cloning the repository initalize the sub modules:
+>`git submodule update --init
+
+To pull the latest changes from the submodules use:
 >`git pull --recurse-submodules`
 To commit changes use:
 >`git commit -am 'added module`
