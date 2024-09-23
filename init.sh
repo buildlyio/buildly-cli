@@ -891,13 +891,13 @@ print_help() {
 cat <<EOF
 
 ${BOLD}${WHITE}Buildly CLI ${version}${OFF}
-
+"""
 If it's your first time using this tool, you probably want to create an application,
 so you can just execute this script with the option --create-application or -ca, e.g,
 
-'''
+"""
 $script_name --create-application
-'''
+
 
 ${BOLD}${WHITE}Usage${OFF}
 
