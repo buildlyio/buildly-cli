@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Check if the script is being run with Bash
+if [ -z "$BASH_VERSION" ]; then
+  echo "This script must be run with Bash. Please use 'bash init.sh' to run this script."
+  exit 1
+fi
+
 #
 # This is a command line interface for buildly platform.
 #
