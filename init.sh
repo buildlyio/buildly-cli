@@ -27,8 +27,9 @@ fi
 
 # Script Metadata
 script_name=$(basename "$0")
-version="3.1.0"
+version="3.2.0"
 tiny_model="tinyllama"
+code_model="codellama"
 
 # Function: Display ASCII Art Header
 display_header() {
@@ -54,7 +55,7 @@ loading_animation() {
     done
 }
 
-# Function: Check & Install Ollama with `tinyllama`
+# Function: Check & Install Ollama with model options
 check_or_install_ollama() {
     if ! command -v ollama &>/dev/null; then
         echo -e "${YELLOW}Ollama is not installed.${OFF}"
@@ -70,14 +71,24 @@ check_or_install_ollama() {
         fi
     fi
 
-    # Ensure `tinyllama` is available
-    if ! ollama list | grep -q "$tiny_model"; then
-        echo -e "${YELLOW}Downloading model '$tiny_model'...${OFF}"
-        ollama pull "$tiny_model"
+    # Let user choose AI model
+    echo -e "Which AI model would you like to use? (1) ${GREEN}tinyllama${OFF} (fast) or (2) ${BLUE}codellama${OFF} (better for coding)"
+    read -r model_choice
+
+    case "$model_choice" in
+        1) ai_model="$tiny_model" ;;
+        2) ai_model="$code_model" ;;
+        *) ai_model="$tiny_model" ;; # Default to tinyllama
+    esac
+
+    # Ensure selected model is available
+    if ! ollama list | grep -q "$ai_model"; then
+        echo -e "${YELLOW}Downloading model '$ai_model'...${OFF}"
+        ollama pull "$ai_model"
     fi
 }
 
-# Function: Set up FastAPI Module (Basic Version)
+# Function: Set up FastAPI Module
 setup_fastapi_module() {
     echo -e "${BOLD}${CYAN}Setting up a FastAPI Buildly Module with SQLAlchemy...${OFF}"
 
@@ -85,9 +96,8 @@ setup_fastapi_module() {
     read -r module_name
     echo -n "Enter the database model names (comma-separated, e.g., 'User,Product'): "
     read -r model_names
-    echo -e "ok setting up ${module_name}\n"
 
-    echo -e "${BOLD}${CYAN}Setting up a FastAPI Buildly Module with SQLAlchemy...${OFF}"
+    echo -e "${BOLD}${CYAN}Setting up your FastAPI module...${OFF}"
     local default_folder="$HOME/Projects"
     local project_folder=""
 
@@ -97,29 +107,14 @@ setup_fastapi_module() {
     fi
     read -r project_folder
 
-    # Use default if empty
     if [ -z "$project_folder" ]; then
         project_folder="$default_folder"
     fi
 
-    # Debug: Print the project folder
-    echo -e "${CYAN}Project folder before sanitization: '$project_folder'${OFF}"
-
-    # Sanitize input and create folder
     project_folder=$(eval echo "$project_folder" | tr -d '\n' | xargs)
-    echo -e "${CYAN}Project folder after sanitization: '$project_folder'${OFF}"
     mkdir -p "$project_folder"
     echo "$project_folder"
-    if [ -z "$project_folder" ]; then
-        echo -e "${RED}Project location not provided. Exiting...${OFF}"
-        exit 1
-    fi
-    if [ -z "$project_folder" ]; then
-        echo -e "${RED}Project location not provided. Exiting...${OFF}"
-        exit 1
-    fi
 
-    # Create service directory
     service_path="$project_folder/$module_name"
     mkdir -p "$service_path"
     cd "$service_path" || exit
@@ -149,14 +144,6 @@ done)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Buildly API", version="1.0")
-
-def get_db():
-    db = SessionLocal()
-    try {
-        yield db
-    } finally {
-        db.close()
-    }
 EOF
 
     # Create `requirements.txt`
@@ -185,7 +172,7 @@ COPY . .
 CMD ["sh", "run.sh"]
 EOF
 
-    echo -e "${GREEN}FastAPI module created in: ${service_path}${OFF}"
+    echo -e "${GREEN}FastAPI module created successfully in: ${service_path}${OFF}"
 }
 
 # Function: Add AI-Generated API Endpoints (Optional)
@@ -198,13 +185,14 @@ add_ai_generated_endpoints() {
         return
     fi
 
-    echo -e "${YELLOW}Fetching AI-generated API endpoints...${OFF}"
+    echo -e "${YELLOW}Buster is thinking... Generating AI-powered API endpoints...${OFF}"
 
-    # Start AI generation in the background
-    loading_animation "Buster is writing the code..." &
+    # Start animation in the background
+    loading_animation "Generating endpoints..." &
     anim_pid=$!
 
-    ollama run "$tiny_model" "Improve the existing FastAPI service by adding CRUD API endpoints for all models." > ai_output.tmp 2>&1 &
+    # Ask AI to generate the code based on existing code in the directory
+    ollama run "$ai_model" "Write Python FastAPI CRUD endpoints for existing SQLAlchemy models in the directory '$service_path'. Ensure code is valid and formatted properly. No explanations, only code." > ai_output.tmp 2>&1 &
     local ai_pid=$!
 
     wait $ai_pid
@@ -213,16 +201,30 @@ add_ai_generated_endpoints() {
     kill $anim_pid &>/dev/null
     wait $anim_pid 2>/dev/null
 
-    # Output AI response in real-time for debugging
-    if [[ -s "ai_output.tmp" ]]; then
+    # Debug: Print raw AI output before cleaning
+    echo -e "${CYAN}Raw AI Output:${OFF}"
+    cat ai_output.tmp
+
+    # Sanitize AI output (remove ANSI escape codes & non-printable chars)
+    sed -i 's/\x1B\[[0-9;]*[a-zA-Z]//g' ai_output.tmp
+    tr -cd '\11\12\15\40-\176' < ai_output.tmp > ai_output_cleaned.tmp
+
+    # Save clean output for debugging
+    cat ai_output_cleaned.tmp > ai_output.log
+    echo -e "${CYAN}AI output saved to ai_output.log for review.${OFF}"
+
+    # Validate AI output (check if it contains Python functions or class definitions)
+    if grep -q "def " ai_output_cleaned.tmp || grep -q "class " ai_output_cleaned.tmp; then
         echo -e "${GREEN}AI successfully generated the code! Appending to main.py...${OFF}"
-        cat ai_output.tmp | tee -a main.py
+        cat ai_output_cleaned.tmp | tee -a main.py
     else
-        echo -e "${RED}AI failed to generate code. Check ai_output.tmp for details.${OFF}"
+        echo -e "${RED}AI output does not contain valid Python functions. Check ai_output.log.${OFF}"
     fi
 
-    rm -f ai_output.tmp
+    # Cleanup temp files
+    rm -f ai_output.tmp ai_output_cleaned.tmp
 }
+
 
 # **Main Script Execution**
 display_header
