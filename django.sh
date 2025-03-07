@@ -176,7 +176,7 @@ add_ai_generated_endpoints() {
     echo -e "${YELLOW}Would you like AI to generate API endpoints? (Y/n)${OFF}"
     read -r use_ai
 
-    PROMPT="
+    PROMPT="$(cat buildly_ai_prompt.txt) 
     You are an experienced Linux engineer with expertise in all Linux 
     commands and their 
     functionality across different Linux systems.  As well as a Django and Python engineer with experience in building RESTful APIs.
@@ -221,7 +221,7 @@ add_ai_generated_endpoints() {
         echo -e "🧹 ${CYAN}Generating AI-powered cleanup commands...${OFF}"
 
     # AI prompt
-    PROMPT="$(cat buildly_ai_prompt.txt) You are a CLI assistant. Provide a list of Bash commands to automate file cleanup and organization for the given service. **Follow these rules strictly**:
+    PROMPT="You are a CLI assistant. Provide a list of Bash commands to automate file cleanup and organization for the given service. **Follow these rules strictly**:
 
     1. **Only output valid shell commands** – no explanations or markdown, just the commands.
     2. **One command per line** – each line should be a complete Bash command ready to run.

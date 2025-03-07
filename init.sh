@@ -29,14 +29,15 @@ fi
 script_name=$(basename "$0")
 version="3.2.0"
 tiny_model="tinyllama"
-code_model="codellama"
+code_model="deepseek-coder-v2"
+prompt_file="buildly_ai_prompt.txt"
 
 # Function: Display ASCII Art Header
 display_header() {
     clear
     echo -e "${BOLD}${CYAN}"
     echo "    /\_/\   "
-    echo "   ( o.o )  Buster the Buildly Rabbit's Module Assistant"
+    echo "   ( o.o )  Buster the Buildly Rabbit Helper and Helper AI"
     echo "    > ^ <   "
     echo -e "${YELLOW}    Buildly.io - Build Smarter, Not Harder${OFF}"
     echo ""
@@ -53,6 +54,33 @@ loading_animation() {
             sleep "$delay"
         done
     done
+}
+
+# Function to fine-tune models dynamically
+fine_tune_model() {
+    local model_name="$1"
+    local fine_tuned_model="buildly-${model_name}"
+
+    # Check if the fine-tuned model already exists
+    if ! ollama list | grep -q "$fine_tuned_model"; then
+        echo -e "Fine-tuning $model_name with Buildly guidelines..."
+        
+        # Generate a modelfile dynamically
+        cat > "${fine_tuned_model}.modelfile" <<EOF
+FROM $model_name
+PARAMETER temperature 0.8
+PARAMETER num_ctx 4096
+SYSTEM """
+$(cat "$prompt_file")
+"""
+EOF
+
+        # Fine-tune the model
+        ollama create "$fine_tuned_model" -f "${fine_tuned_model}.modelfile"
+        echo -e "${GREEN}Fine-tuned model created: $fine_tuned_model${OFF}"
+    else
+        echo -e "${GREEN}Fine-tuned model already exists: $fine_tuned_model${OFF}"
+    fi
 }
 
 # Function: Check & Install Ollama with model options
@@ -72,175 +100,86 @@ check_or_install_ollama() {
     fi
 
     # Let user choose AI model
-    echo -e "Which AI model would you like to use? (1) ${GREEN}tinyllama${OFF} (fast) or (2) ${BLUE}codellama${OFF} (better for coding)"
+    echo -e "Which AI model would you like to use? (1) ${GREEN}tinyllama${OFF} (fast) or (2) ${BLUE}deepseek-coder-v2${OFF} (better for coding)"
     read -r model_choice
 
     case "$model_choice" in
-        1) ai_model="$tiny_model" ;;
-        2) ai_model="$code_model" ;;
-        *) ai_model="$tiny_model" ;; # Default to tinyllama
+        1) base_model="$tiny_model" ;;
+        2) base_model="$code_model" ;;
+        *) base_model="$tiny_model" ;; # Default to tinyllama
     esac
 
     # Ensure selected model is available
-    if ! ollama list | grep -q "$ai_model"; then
-        echo -e "${YELLOW}Downloading model '$ai_model'...${OFF}"
-        ollama pull "$ai_model"
+    if ! ollama list | grep -q "$base_model"; then
+        echo -e "${YELLOW}Downloading model '$base_model'...${OFF}"
+        if ! ollama pull "$base_model"; then
+            echo -e "${RED}Failed to download model '$base_model'. Please check your internet connection.${OFF}"
+            exit 1
+        fi
     fi
+
+    # Set the fine-tuned model name
+    fine_tuned_model="buildly-${base_model}"
 }
 
-# Function: Set up FastAPI Module
-setup_fastapi_module() {
-    echo -e "${BOLD}${CYAN}Setting up a FastAPI Buildly Module with SQLAlchemy...${OFF}"
+# Function: Check & Fine-Tune if necessary
+check_fine_tune_model() {
+    local model_name="$1"
+    local fine_tuned_model="buildly-${model_name}"
 
-    echo -n "Enter the module name: "
-    read -r module_name
-    echo -n "Enter the database model names (comma-separated, e.g., 'User,Product'): "
-    read -r model_names
-
-    echo -e "${BOLD}${CYAN}Setting up your FastAPI module...${OFF}"
-    local default_folder="$HOME/Projects"
-    local project_folder=""
-
-    echo -e "${YELLOW}Where would you like to save this project?${OFF}"
-    if [ -d "$default_folder" ]; then
-        echo -e "Press Enter to use the default: ${GREEN}$default_folder${OFF}"
+    # Ensure the fine-tuned model exists
+    if ! ollama list | grep -q "$fine_tuned_model"; then
+        echo -e "${YELLOW}Fine-tuned model does not exist. Fine-tuning now...${OFF}"
+        fine_tune_model "$model_name"
     fi
-    read -r project_folder
-
-    if [ -z "$project_folder" ]; then
-        project_folder="$default_folder"
-    fi
-
-    project_folder=$(eval echo "$project_folder" | tr -d '\n' | xargs)
-    mkdir -p "$project_folder"
-    echo "$project_folder"
-
-    service_path="$project_folder/$module_name"
-    mkdir -p "$service_path"
-    cd "$service_path" || exit
-
-    # Create `main.py` with a basic FastAPI template
-    cat > main.py <<EOF
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy import Column, Integer, String, create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
-from pydantic import BaseModel
-
-DATABASE_URL = "sqlite:///./database.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-$(for model in $(echo "$model_names" | tr ',' ' '); do
-cat <<MODEL
-class ${model^}(Base):
-    __tablename__ = "${model,,}s"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-
-MODEL
-done)
-
-Base.metadata.create_all(bind=engine)
-
-app = FastAPI(title="Buildly API", version="1.0")
-EOF
-
-    # Create `requirements.txt`
-    cat > requirements.txt <<EOF
-fastapi
-uvicorn
-pydantic
-sqlalchemy
-EOF
-
-    # Create `run.sh`
-    cat > run.sh <<EOF
-#!/bin/bash
-echo "Starting FastAPI service..."
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-EOF
-    chmod +x run.sh
-
-    # Create `Dockerfile`
-    cat > Dockerfile <<EOF
-FROM python:3.9-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-CMD ["sh", "run.sh"]
-EOF
-
-    echo -e "${GREEN}FastAPI module created successfully in: ${service_path}${OFF}"
-}
-
-# Function: Add AI-Generated API Endpoints (Optional)
-add_ai_generated_endpoints() {
-    echo -e "${YELLOW}Would you like AI to generate API endpoints and improve your models? (Y/n)${OFF}"
-    read -r use_ai
-
-    if [[ "$use_ai" != "Y" && "$use_ai" != "y" ]]; then
-        echo -e "${YELLOW}Skipping AI-generated API endpoints.${OFF}"
-        return
-    fi
-
-    echo -e "${YELLOW}Buster is thinking... Generating AI-powered API endpoints...${OFF}"
-
-    # Start animation in the background
-    loading_animation "Generating endpoints..." &
-    anim_pid=$!
-
-    # Ask AI to generate the code based on existing code in the directory
-    ollama run "$ai_model" "$(cat buildly_ai_prompt.txt) Write Python FastAPI CRUD endpoints for existing SQLAlchemy models in the directory '$service_path'. Ensure code is valid and formatted properly. No explanations, only code." > ai_output.tmp 2>&1 &
-    local ai_pid=$!
-
-    wait $ai_pid
-
-    # Stop animation
-    kill $anim_pid &>/dev/null
-    wait $anim_pid 2>/dev/null
-
-    # Debug: Print raw AI output before cleaning
-    echo -e "${CYAN}Raw AI Output:${OFF}"
-    cat ai_output.tmp
-
-    # Sanitize AI output (remove ANSI escape codes & non-printable chars)
-    sed -i 's/\x1B\[[0-9;]*[a-zA-Z]//g' ai_output.tmp
-    tr -cd '\11\12\15\40-\176' < ai_output.tmp > ai_output_cleaned.tmp
-
-    # Save clean output for debugging
-    cat ai_output_cleaned.tmp > ai_output.log
-    echo -e "${CYAN}AI output saved to ai_output.log for review.${OFF}"
-
-    # Validate AI output (check if it contains Python functions or class definitions)
-    if grep -q "def " ai_output_cleaned.tmp || grep -q "class " ai_output_cleaned.tmp; then
-        echo -e "${GREEN}AI successfully generated the code! Appending to main.py...${OFF}"
-        cat ai_output_cleaned.tmp | tee -a main.py
-    else
-        echo -e "${RED}AI output does not contain valid Python functions. Check ai_output.log.${OFF}"
-    fi
-
-    # Cleanup temp files
-    rm -f ai_output.tmp ai_output_cleaned.tmp
-}
-
+}   
 
 # **Main Script Execution**
 display_header
 check_or_install_ollama
 
-echo -e "${BOLD}${WHITE}Welcome to the Buildly Logic Module Assistant (v${version})${OFF}"
-echo "1. Set up a FastAPI Buildly Logic Module"
-echo "2. Exit"
+# Ensure the fine-tuned model exists
+check_fine_tune_model "$base_model"
 
-read -r user_choice
+echo -e "${BOLD}${WHITE}Welcome to the Buildly Developer Helper (v${version})${OFF}\n We will fine tune an Ollama model to help you get started.\n"
 
-if [[ "$user_choice" == "1" ]]; then
-    setup_fastapi_module
-    add_ai_generated_endpoints
-elif [[ "$user_choice" == "2" ]]; then
-    echo -e "${RED}Exiting...${OFF}"
-else
-    echo -e "${RED}Invalid choice!${OFF}"
-fi
+# Function to send a message to Ollama and get the response
+function ollama_chat {
+    local message="$1"
+    local prompt="$message"
+
+    # Start the loading animation in the background
+    loading_animation "Thinking..." &
+    local loading_pid=$!
+
+    # Get the response from Ollama
+    response=$(ollama run "$fine_tuned_model" "$prompt" 2>&1)
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Error: an error was encountered while running the model: $response${OFF}"
+        kill "$loading_pid"
+        wait "$loading_pid" 2>/dev/null
+        continue
+    fi
+
+    # Kill the loading animation
+    kill "$loading_pid"
+    wait "$loading_pid" 2>/dev/null
+
+    echo "$response"
+}
+
+# Main loop for chatting
+while true; do
+  # Prompt the user for input
+  read -p "How can I help?: " user_input
+
+  # Exit the loop if the user enters "exit"
+  if [[ "$user_input" == "exit" ]]; then
+    break
+  fi
+
+  # Send the user input to Ollama and print the response
+  ollama_chat "$user_input"
+done
+
+echo "Chat ended."

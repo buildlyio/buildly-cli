@@ -1,12 +1,16 @@
 # Buildly CLI
 
-Command line tool for creating and configuring your Buildly application.
+Command line tool for creating and configuring your Buildly Logic Modules and to setup your Dev Encrionment.
+Also Buildy Helper AI, to help answer anyquestions and guide you in configuring your services, and deploying them.
+
+Check the Community!
+https://collab.buildly.io and get started contributing to the Open Source projects
 
 ![Buildly CLI --help](images/cli-help.png)
 
 ## Getting Started
 
-After forking and installing all prerequisites, you can run the following command to start creating your first app `init.sh --create-application`. The instructions will help you to create and configure a completely new Buildly application with services pulled directly from Buildly Marketplace.
+After forking and installing all prerequisites, you can run the following command to start creating your first app `init.sh` to setup your AI coding and architecture assistant. The instructions will help you to create and configure a completely new Buildly application with services pulled directly from Buildly Marketplace or build brand new ones.
 
 ### Prerequisites
 
@@ -16,6 +20,7 @@ Basic prerequisites are:
 * git version 2.17
 
 You might also need one or more of the following apps depending on the functionalities you're going to use:
+* ollama
 * kubectl
 * docker version 19+
 * helm version 2+
