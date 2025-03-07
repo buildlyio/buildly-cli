@@ -28,8 +28,8 @@ fi
 # Script Metadata
 script_name=$(basename "$0")
 version="1.1.0"
-github_template="https://github.com/Buildly-Marketplace/crm_service.git"
-tiny_model="tinyllama"
+github_template="https://github.com/Buildly-Marketplace/logic_service.git"
+tiny_model="deepseek-coder-v2"
 
 # Function: Display ASCII Art Header
 display_header() {
@@ -40,6 +40,19 @@ display_header() {
     echo "    > ^ <   "
     echo -e "${YELLOW}    Buildly.io - Build Smarter, Not Harder${OFF}"
     echo ""
+}
+
+# Function: Animated "Buster Chasing ..." Loader
+loading_animation() {
+    local message=$1
+    delay=0.2
+    frames=("🐇   " " .🐇  " "  ..🐇 " "   ...🐇" "  ..🐇" " .🐇  " "  .🐇.  ")
+    while true; do
+        for frame in "${frames[@]}"; do
+            echo -ne "${CYAN}${frame}${YELLOW} $message ${OFF}\r"
+            sleep "$delay"
+        done
+    done
 }
 
 # Function: Check & Install Ollama with `tinyllama`
@@ -163,6 +176,26 @@ add_ai_generated_endpoints() {
     echo -e "${YELLOW}Would you like AI to generate API endpoints? (Y/n)${OFF}"
     read -r use_ai
 
+    PROMPT="
+    You are an experienced Linux engineer with expertise in all Linux 
+    commands and their 
+    functionality across different Linux systems.  As well as a Django and Python engineer with experience in building RESTful APIs.
+
+    Your task is to generate Django REST framework viewsets and serializers for
+    models in $app_folder/models.py and make sure to remove any models or code
+    not related to $model_names models. Make sure to only output code and
+    nothing else.  Clean up any directories or Python files that isn't related
+    to $model_names in the current directory and subfolders by renaming those
+    files and directories. Ensure the folder structure and requirements.txt
+    file are up to date and work for generating an OpenAPI Swagger documented
+    set of endpoints for each model.
+
+    Output only the command as a single line of plain text, with no 
+    quotes, formatting, or additional commentary. Do not use markdown or any 
+    other formatting. Do not include the command into a code block.
+    Don't include the shell itself (bash, zsh, etc.) in the command.
+    "
+
     if [[ "$use_ai" != "Y" && "$use_ai" != "y" ]]; then
         echo -e "${YELLOW}Skipping AI-generated API endpoints.${OFF}"
         return
@@ -178,28 +211,51 @@ add_ai_generated_endpoints() {
         exit 1
     fi
 
-    ollama run "$tiny_model" "Generate Django REST framework viewsets and serializers for models in $app_folder/models.py." > ai_output.tmp 2>&1 &
+    (cd "$service_path" && ollama run "$tiny_model" "$PROMPT Generate Django REST framework viewsets and serializers for models in $app_folder/models.py and make sure to remove any models or code not related to $model_names models. Make sure to only output code and nothing else." > ai_output.tmp 2>&1) &
 
+    # Wait for the first AI task to complete
     local ai_pid=$!
     wait $ai_pid
 
-    echo -e "${CYAN}AI Output:${OFF}"
-    cat ai_output.tmp
+    #CLEANUP DIRS
+        echo -e "🧹 ${CYAN}Generating AI-powered cleanup commands...${OFF}"
 
-    # Save clean output
-    sed -i 's/\x1B\[[0-9;]*[a-zA-Z]//g' ai_output.tmp
-    tr -cd '\11\12\15\40-\176' < ai_output.tmp > ai_output_cleaned.tmp
-    cat ai_output_cleaned.tmp > ai_output.log
+    # AI prompt
+    PROMPT="You are a CLI assistant. Provide a list of Bash commands to automate file cleanup and organization for the given service. **Follow these rules strictly**:
 
-    # Append valid AI output
-    if grep -q "class " ai_output_cleaned.tmp || grep -q "def " ai_output_cleaned.tmp; then
-        echo -e "${GREEN}Appending AI-generated API to views.py...${OFF}"
-        cat ai_output_cleaned.tmp >> "$app_folder/views.py"
-    else
-        echo -e "${RED}AI output is invalid. Check ai_output.log.${OFF}"
-    fi
+    1. **Only output valid shell commands** – no explanations or markdown, just the commands.
+    2. **One command per line** – each line should be a complete Bash command ready to run.
+    3. **No placeholders or ambiguous syntax** – use actual file names/paths (based on context) instead of example or generic terms.
+    4. **Ensure proper safety** – use flags or patterns that prevent unintended deletions (e.g., avoid rm -rf without specific paths; include confirmations or restrictions as needed).
+    5. **Confine to the service directory** – operate only within the provided service’s folder (do not touch files outside the given directory structure).
+    6. **Use precise patterns** – if using glob or regex, make them specific to target only intended files.
 
-    rm -f ai_output.tmp ai_output_cleaned.tmp
+    _Remember:_ The output should contain nothing except the shell commands, each on its own line and be able to run in a Bash shell.
+    "
+
+    # Run Ollama in the background
+    ollama run "$tiny_model" "$PROMPT" > ai_commands.bash 2>&1 &
+    ai_pid=$!
+
+    # Show loading animation
+    loading_animation "Buster is organizing files..." &
+    anim_pid=$!
+
+    # Wait for Ollama to finish
+    wait $ai_pid
+
+    # Stop animation
+    kill $anim_pid &>/dev/null
+    wait $anim_pid 2>/dev/null
+
+    echo -e "${GREEN}✅ AI-generated cleanup commands ready for execution.${OFF}"
+
+    echo -e ai_commands.bash
+
+    echo -e "${GREEN}🎉 AI-driven cleanup completed!${OFF}"
+
+    # Clean up temporary files
+    rm -f ai_commands.tmp ai_commands_cleaned.tmp ai_commands_filtered.tmp
 }
 
 # **Main Script Execution**
