@@ -192,7 +192,7 @@ add_ai_generated_endpoints() {
     anim_pid=$!
 
     # Ask AI to generate the code based on existing code in the directory
-    ollama run "$ai_model" "Write Python FastAPI CRUD endpoints for existing SQLAlchemy models in the directory '$service_path'. Ensure code is valid and formatted properly. No explanations, only code." > ai_output.tmp 2>&1 &
+    ollama run "$ai_model" "$(cat buildly_ai_prompt.txt) Write Python FastAPI CRUD endpoints for existing SQLAlchemy models in the directory '$service_path'. Ensure code is valid and formatted properly. No explanations, only code." > ai_output.tmp 2>&1 &
     local ai_pid=$!
 
     wait $ai_pid

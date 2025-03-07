@@ -221,7 +221,7 @@ add_ai_generated_endpoints() {
         echo -e "🧹 ${CYAN}Generating AI-powered cleanup commands...${OFF}"
 
     # AI prompt
-    PROMPT="You are a CLI assistant. Provide a list of Bash commands to automate file cleanup and organization for the given service. **Follow these rules strictly**:
+    PROMPT="$(cat buildly_ai_prompt.txt) You are a CLI assistant. Provide a list of Bash commands to automate file cleanup and organization for the given service. **Follow these rules strictly**:
 
     1. **Only output valid shell commands** – no explanations or markdown, just the commands.
     2. **One command per line** – each line should be a complete Bash command ready to run.
