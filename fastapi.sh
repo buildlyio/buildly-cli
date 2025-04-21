@@ -71,7 +71,28 @@ check_or_install_ollama() {
         fi
     fi
 
-    # Let user choose AI model
+    # Check for already installed models
+    installed_models=$(ollama list | awk '{print $1}' | tail -n +2)
+    if [[ -n "$installed_models" ]]; then
+        echo -e "${YELLOW}The following models are already installed:${OFF}"
+        echo "$installed_models"
+        echo -e "Would you like to use one of these models? (Y/n)"
+        read -r use_existing_model
+
+        if [[ "$use_existing_model" == "Y" || "$use_existing_model" == "y" ]]; then
+            echo -e "Enter the name of the model you want to use:"
+            read -r selected_model
+            if echo "$installed_models" | grep -q "^$selected_model$"; then
+                ai_model="$selected_model"
+                echo -e "${GREEN}Using existing model: $ai_model${OFF}"
+                return
+            else
+                echo -e "${RED}Model '$selected_model' is not installed.${OFF}"
+            fi
+        fi
+    fi
+
+    # Let user choose AI model if no valid existing model is selected
     echo -e "Which AI model would you like to use? (1) ${GREEN}buildly-tinyllama${OFF} (fast) or (2) ${BLUE}buildly-deepseek-coder-v2${OFF} (better for coding)"
     read -r model_choice
 

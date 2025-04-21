@@ -92,26 +92,17 @@ buildly_mkt_path="Buildly-Marketplace"
 createDjangoService()
 {
   # Check specific dependencies
-  type docker-compose >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker Compose' installed.
-  Check the documentation of how to install it: https://docs.docker.com/compose/install/"; exit 1; }
+  type bash >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Bash' installed.
+  Please ensure Bash is installed and available."; exit 1; }
 
-  # check if folder exists
-  if [ ! -d django-service-wizard ]; then
-    MSG="The Django service wizard \"django-service-wizard\" wasn't found"
+  # Check if django.sh exists
+  if [ ! -f django.sh ]; then
+    MSG="The Django service script \"django.sh\" wasn't found in the current directory"
     print_message "error" "$MSG"
   fi
 
-  # check if sub-module was pulled
-  if [ ! "$(ls -A "django-service-wizard")" ]; then
-    MSG="The Django service wizard \"django-service-wizard\" wasn't found.\nPlease pull sub-modules using the following git command: 'git pull --recurse-submodules'"
-    print_message "error" "$MSG"
-  fi
-
-  (
-  cd "django-service-wizard" || return
-  # create a new service use django-service-wizard for now
-  docker-compose run --rm django_service_wizard -u "$(id -u):$(id -g)" -v "$(pwd)":/code || echo "Docker not configured, installed or running"
-  )
+  # Execute django.sh to create a new Django service
+  bash django.sh || { echo >&2 "Failed to execute django.sh. Please ensure it is properly configured."; exit 1; }
 }
 
 ###############################################################################

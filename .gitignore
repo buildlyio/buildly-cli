@@ -3,3 +3,4 @@ YourApplication
 .idea
 buildly_core
 helm-charts
+.vscode

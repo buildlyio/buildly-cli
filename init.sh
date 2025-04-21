@@ -34,7 +34,12 @@ prompt_file="buildly_ai_prompt.txt"
 
 # Function: Display ASCII Art Header
 display_header() {
-    clear
+    # Skip clear if the script is sourced
+    if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+        clear
+    else
+        echo -e "${YELLOW}Script is sourced; skipping screen clear.${OFF}"
+    fi
     echo -e "${BOLD}${CYAN}"
     echo "    /\_/\   "
     echo "   ( o.o )  Buster the Buildly Rabbit Helper and Helper AI"
@@ -99,22 +104,33 @@ check_or_install_ollama() {
         fi
     fi
 
-    # Let user choose AI model
-    echo -e "Which AI model would you like to use? (1) ${GREEN}tinyllama${OFF} (fast) or (2) ${BLUE}deepseek-coder-v2${OFF} (better for coding)"
-    read -r model_choice
+    # List available models
+    echo -e "${CYAN}Available models on your system:${OFF}"
+    ollama list
+    echo -e "Would you like to use an existing model? (Y/n)"
+    read -r use_existing_model
 
-    case "$model_choice" in
-        1) base_model="$tiny_model" ;;
-        2) base_model="$code_model" ;;
-        *) base_model="$tiny_model" ;; # Default to tinyllama
-    esac
+    if [[ "$use_existing_model" == "Y" || "$use_existing_model" == "y" ]]; then
+        echo -e "Enter the name of the model you want to use:"
+        read -r base_model
+    else
+        # Let user choose one of our models
+        echo -e "Which AI model would you like to use? (1) ${GREEN}tinyllama${OFF} (fast) or (2) ${BLUE}deepseek-coder-v2${OFF} (better for coding)"
+        read -r model_choice
 
-    # Ensure selected model is available
-    if ! ollama list | grep -q "$base_model"; then
-        echo -e "${YELLOW}Downloading model '$base_model'...${OFF}"
-        if ! ollama pull "$base_model"; then
-            echo -e "${RED}Failed to download model '$base_model'. Please check your internet connection.${OFF}"
-            exit 1
+        case "$model_choice" in
+            1) base_model="$tiny_model" ;;
+            2) base_model="$code_model" ;;
+            *) base_model="$tiny_model" ;; # Default to tinyllama
+        esac
+
+        # Ensure selected model is available
+        if ! ollama list | grep -q "$base_model"; then
+            echo -e "${YELLOW}Downloading model '$base_model'...${OFF}"
+            if ! ollama pull "$base_model"; then
+                echo -e "${RED}Failed to download model '$base_model'. Please check your internet connection.${OFF}"
+                exit 1
+            fi
         fi
     fi
 
@@ -170,16 +186,62 @@ function ollama_chat {
 
 # Main loop for chatting
 while true; do
-  # Prompt the user for input
-  read -p "How can I help?: " user_input
+    echo -e "\nWhat would you like to do?"
+    echo "1) Build a new service with Django and run django.sh script"
+    echo "2) Build an app with FastAPI and run fastapi.sh script"
+    echo "3) Build a new app including the Buildly-core and frontend template running dev.sh"
+    echo "4) Ask Buster for help on an existing service or problem in the chat"
+    echo "Type 'exit' to quit."
 
-  # Exit the loop if the user enters "exit"
-  if [[ "$user_input" == "exit" ]]; then
-    break
-  fi
+    # Prompt the user for input
+    read -p "Enter your choice (1/2/3/4): " user_input
 
-  # Send the user input to Ollama and print the response
-  ollama_chat "$user_input"
+    # Exit the loop if the user enters "exit"
+    if [[ "$user_input" == "exit" ]]; then
+        echo "Exiting. Goodbye!"
+        break
+    fi
+
+    case "$user_input" in
+        1)
+            echo -e "${GREEN}Building a new service with Django...${OFF}"
+            if [[ -f "./django.sh" ]]; then
+                bash ./django.sh
+            else
+                echo -e "${RED}Error: django.sh script not found.${OFF}"
+            fi
+            ;;
+        2)
+            echo -e "${GREEN}Building an app with FastAPI...${OFF}"
+            if [[ -f "./fastapi.sh" ]]; then
+                bash ./fastapi.sh
+            else
+                echo -e "${RED}Error: fastapi.sh script not found.${OFF}"
+            fi
+            ;;
+        3)
+            echo -e "${GREEN}Building a new app with Buildly-core and frontend template...${OFF}"
+            if [[ -f "./dev.sh" ]]; then
+                bash ./dev.sh -ca
+            else
+                echo -e "${RED}Error: dev.sh script not found.${OFF}"
+            fi
+            ;;
+        4)
+            echo -e "${CYAN}You can now ask Buster for help. Type your question below:${OFF}"
+            read -p "Your question: " user_question
+            if [[ -n "$user_question" ]]; then
+                echo -e "${GREEN}Sending your question to Buster...${OFF}"
+                response=$(ollama_chat "$user_question")
+                echo -e "${CYAN}Buster's response:${OFF}\n$response"
+            else
+                echo -e "${YELLOW}No question entered. Returning to the main menu.${OFF}"
+            fi
+            ;;
+        *)
+            echo -e "${YELLOW}Invalid choice. Please select 1, 2, 3, or 4.${OFF}"
+            ;;
+    esac
 done
 
 echo "Chat ended."

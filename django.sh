@@ -2,7 +2,7 @@
 
 # Ensure script runs in Bash
 if [ -z "$BASH_VERSION" ]; then
-  echo "This script must be run with Bash. Please use 'bash init_django.sh' to run this script."
+  echo "This script requires Bash. Use 'bash init_django.sh' to run it."
   exit 1
 fi
 
@@ -14,6 +14,7 @@ if [ -t 1 ]; then
     BLUE="$(tput setaf 4)"
     CYAN="$(tput setaf 6)"
     BOLD="$(tput bold)"
+    WHITE="$(tput setaf 7)"
     OFF="$(tput sgr0)"
 else
     RED=""
@@ -47,12 +48,14 @@ loading_animation() {
     local message=$1
     delay=0.2
     frames=("🐇   " " .🐇  " "  ..🐇 " "   ...🐇" "  ..🐇" " .🐇  " "  .🐇.  ")
-    while true; do
+    end_time=$((SECONDS + ${2:-10})) # Default duration is 10 seconds if not provided
+    while [ $SECONDS -lt $end_time ]; do
         for frame in "${frames[@]}"; do
             echo -ne "${CYAN}${frame}${YELLOW} $message ${OFF}\r"
             sleep "$delay"
         done
     done
+    echo -ne "${OFF}\r" # Clear the line after animation ends
 }
 
 # Function: Check & Install Ollama with `tinyllama`
@@ -62,17 +65,25 @@ check_or_install_ollama() {
         echo -e "Would you like to install Ollama? (Y/n)"
         read -r install_ollama
 
-        if [[ "$install_ollama" == "Y" || "$install_ollama" == "y" ]]; then
+            if ! curl -fsSL https://ollama.ai/install.sh | sh; then
+                echo -e "${RED}Failed to install Ollama. Exiting...${OFF}"
+                exit 1
+            fi
             echo -e "${GREEN}Installing Ollama...${OFF}"
             curl -fsSL https://ollama.ai/install.sh | sh
         else
             echo -e "${YELLOW}Skipping Ollama installation.${OFF}"
             return
-        fi
-    fi
-
     # Ensure `tinyllama` is available
-    if ! ollama list | grep -q "$tiny_model"; then
+    if command -v ollama &>/dev/null; then
+        if ! ollama list | grep -q "$tiny_model"; then
+            echo -e "${YELLOW}Downloading model '$tiny_model'...${OFF}"
+            ollama pull "$tiny_model"
+        fi
+    else
+        echo -e "${RED}Error: Ollama is not installed. Please install Ollama first.${OFF}"
+        exit 1
+    fi
         echo -e "${YELLOW}Downloading model '$tiny_model'...${OFF}"
         ollama pull "$tiny_model"
     fi
@@ -84,8 +95,21 @@ setup_django_module() {
 
     echo -n "Enter the module name: "
     read -r module_name
-    echo -n "Enter the database model names (comma-separated, e.g., 'Customer,Invoice'): "
-    read -r model_names
+
+    echo -n "Briefly describe the module you are building: "
+    read -r module_description
+
+    echo -e "${YELLOW}Would you like AI to generate the model names from your description? (Y/n)${OFF}"
+    read -r generate_models
+
+    if [[ "$generate_models" == "Y" || "$generate_models" == "y" ]]; then
+        echo -e "${YELLOW}Generating model names from description...${OFF}"
+        model_names=$(ollama run "$tiny_model" "Generate a comma-separated list of database model names based on the following description: $module_description")
+        echo -e "${GREEN}Generated model names: $model_names${OFF}"
+    else
+        echo -n "Enter the database model names (comma-separated, e.g., 'Customer,Invoice'): "
+        read -r model_names
+    fi
 
     # Ask for project location
     local default_folder="$HOME/Projects"
@@ -107,14 +131,11 @@ setup_django_module() {
     mkdir -p "$service_path"
     cd "$project_folder" || exit
 
-    echo -e "${YELLOW}Cloning Django template from $github_template...${OFF}"
-    git clone "$github_template" "$service_path"
+    git clone "$github_template" "$service_path" || { echo -e "${RED}Error: Failed to clone the Django template. Exiting...${OFF}"; exit 1; }
 
-    # Navigate to service directory
-    cd "$service_path" || exit
+    cd "$service_path" || { echo -e "${RED}Error: Failed to navigate to the service directory. Exiting...${OFF}"; exit 1; }
 
-    # Remove existing `.git` history
-    rm -rf .git
+    rm -rf .git || { echo -e "${RED}Error: Failed to remove existing .git history. Exiting...${OFF}"; exit 1; }
 
     # Find the Django app directory (assume it's the one containing `models.py`)
     app_folder=$(find . -type f -name "models.py" | head -n 1 | xargs dirname)
@@ -126,19 +147,62 @@ setup_django_module() {
 
     echo -e "${GREEN}Django app folder detected: ${app_folder}${OFF}"
 
-    # Generate models
-    echo -e "${YELLOW}Generating models...${OFF}"
-    for model in $(echo "$model_names" | tr ',' ' '); do
-        cat >> "$app_folder/models.py" <<MODEL
+    # Validate model names
+    if [ -z "$model_names" ]; then
+        echo -e "${RED}Error: No model names provided. Please provide valid model names.${OFF}"
+        exit 1
+    fi
 
-class ${model^}(models.Model):
-    name = models.CharField(max_length=255)
+    if ! echo "$model_names" | grep -Eq '^[a-zA-Z0-9_,]+$'; then
+        echo -e "${RED}Error: Model names contain invalid characters. Only alphanumeric characters and commas are allowed.${OFF}"
+        exit 1
+    fi
 
-    def __str__(self):
-        return self.name
+    # Generate models using AI
+    echo -e "${YELLOW}Generating models using AI...${OFF}"
+    ai_prompt="You are an expert Django developer following Buildly best practices. Generate Django models based on the following description and model names. Ensure the models are well-structured, include appropriate fields, and follow Django conventions. Description: $module_description. Model names: $model_names."
 
-MODEL
-    done
+    # Use the existing Ollama model to generate the models
+    models_content=$(ollama run "$tiny_model" "$ai_prompt")
+
+    if [ -z "$models_content" ]; then
+        echo -e "${RED}Error: Failed to generate models using AI.${OFF}"
+        exit 1
+    fi
+
+    # Write the generated models to models.py
+    echo "$models_content" > "$app_folder/models.py"
+    echo -e "${GREEN}AI-generated models added to ${app_folder}/models.py${OFF}"
+
+    # Generate serializers using AI
+    echo -e "${YELLOW}Generating serializers using AI...${OFF}"
+    ai_prompt_serializers="You are an expert Django developer. Generate Django REST framework serializers for the following models. Ensure each serializer includes filters for all fields. Models: $models_content."
+
+    serializers_content=$(ollama run "$tiny_model" "$ai_prompt_serializers")
+
+    if [ -z "$serializers_content" ]; then
+        echo -e "${RED}Error: Failed to generate serializers using AI.${OFF}"
+        exit 1
+    fi
+
+    # Write the generated serializers to serializers.py
+    echo "$serializers_content" > "$app_folder/serializers.py"
+    echo -e "${GREEN}AI-generated serializers added to ${app_folder}/serializers.py${OFF}"
+
+    # Generate views using AI
+    echo -e "${YELLOW}Generating views using AI...${OFF}"
+    ai_prompt_views="You are an expert Django developer. Generate Django REST framework views (viewsets) for the following models. Ensure each viewset is properly configured for CRUD operations and integrates with the serializers. Models: $models_content."
+
+    views_content=$(ollama run "$tiny_model" "$ai_prompt_views")
+
+    if [ -z "$views_content" ]; then
+        echo -e "${RED}Error: Failed to generate views using AI.${OFF}"
+        exit 1
+    fi
+
+    # Write the generated views to views.py
+    echo "$views_content" > "$app_folder/views.py"
+    echo -e "${GREEN}AI-generated views added to ${app_folder}/views.py${OFF}"
 
     echo -e "${GREEN}Models added to ${app_folder}/models.py${OFF}"
 
@@ -262,17 +326,24 @@ add_ai_generated_endpoints() {
 display_header
 check_or_install_ollama
 
-echo -e "${BOLD}${WHITE}Welcome to the Buildly Django Module Assistant (v${version})${OFF}"
+echo -e "${BOLD}${CYAN}Welcome to the Buildly Django Module Assistant (v${version})${OFF}"
 echo "1. Set up a Django Buildly Module"
 echo "2. Exit"
 
-read -r user_choice
+while true; do
+    read -r user_choice
 
-if [[ "$user_choice" == "1" ]]; then
-    setup_django_module
-    add_ai_generated_endpoints
-elif [[ "$user_choice" == "2" ]]; then
-    echo -e "${RED}Exiting...${OFF}"
+    if [[ "$user_choice" == "1" ]]; then
+        setup_django_module
+        add_ai_generated_endpoints
+        break
+    elif [[ "$user_choice" == "2" ]]; then
+        echo -e "${RED}Exiting...${OFF}"
+        break
+    else
+        echo -e "${RED}Invalid choice! Please try again.${OFF}"
+    fi
+done
 else
     echo -e "${RED}Invalid choice!${OFF}"
 fi
