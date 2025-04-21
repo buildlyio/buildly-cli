@@ -65,27 +65,50 @@ check_or_install_ollama() {
         echo -e "Would you like to install Ollama? (Y/n)"
         read -r install_ollama
 
+        if [[ "$install_ollama" == "Y" || "$install_ollama" == "y" ]]; then
+            echo -e "${GREEN}Installing Ollama...${OFF}"
             if ! curl -fsSL https://ollama.ai/install.sh | sh; then
                 echo -e "${RED}Failed to install Ollama. Exiting...${OFF}"
                 exit 1
             fi
-            echo -e "${GREEN}Installing Ollama...${OFF}"
-            curl -fsSL https://ollama.ai/install.sh | sh
         else
-            echo -e "${YELLOW}Skipping Ollama installation.${OFF}"
-            return
-    # Ensure `tinyllama` is available
-    if command -v ollama &>/dev/null; then
-        if ! ollama list | grep -q "$tiny_model"; then
-            echo -e "${YELLOW}Downloading model '$tiny_model'...${OFF}"
-            ollama pull "$tiny_model"
+            echo -e "${RED}Ollama is required to proceed. Exiting...${OFF}"
+            exit 1
+        fi
+    fi
+
+    # Check for existing models
+    if ollama list | grep -q "$tiny_model"; then
+        echo -e "${GREEN}Model '$tiny_model' is already installed.${OFF}"
+        echo -e "Would you like to use this model? (Y/n)"
+        read -r use_existing_model
+
+        if [[ "$use_existing_model" != "Y" && "$use_existing_model" != "y" ]]; then
+            echo -e "${YELLOW}Enter the name of a different model to use:${OFF}"
+            read -r new_model
+            tiny_model="$new_model"
         fi
     else
-        echo -e "${RED}Error: Ollama is not installed. Please install Ollama first.${OFF}"
-        exit 1
-    fi
-        echo -e "${YELLOW}Downloading model '$tiny_model'...${OFF}"
-        ollama pull "$tiny_model"
+        echo -e "${YELLOW}Model '$tiny_model' is not installed.${OFF}"
+        echo -e "Would you like to download it? (Y/n)"
+        read -r download_model
+
+        if [[ "$download_model" == "Y" || "$download_model" == "y" ]]; then
+            echo -e "${YELLOW}Downloading model '$tiny_model'...${OFF}"
+            if ! ollama pull "$tiny_model"; then
+                echo -e "${RED}Failed to download model '$tiny_model'. Exiting...${OFF}"
+                exit 1
+            fi
+        else
+            echo -e "${YELLOW}Enter the name of a different model to use:${OFF}"
+            read -r new_model
+            tiny_model="$new_model"
+            echo -e "${YELLOW}Downloading model '$tiny_model'...${OFF}"
+            if ! ollama pull "$tiny_model"; then
+                echo -e "${RED}Failed to download model '$tiny_model'. Exiting...${OFF}"
+                exit 1
+            fi
+        fi
     fi
 }
 

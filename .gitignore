@@ -4,3 +4,5 @@ YourApplication
 buildly_core
 helm-charts
 .vscode
+.modelfile
+*.modelfile
