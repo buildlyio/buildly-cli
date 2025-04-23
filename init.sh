@@ -106,13 +106,24 @@ check_or_install_ollama() {
 
     # List available models
     echo -e "${CYAN}Available models on your system:${OFF}"
-    ollama list
+    available_models=($(ollama list | awk '{print $1}'))
+    for i in "${!available_models[@]}"; do
+        echo "$((i + 1))) ${available_models[$i]}"
+    done
+
     echo -e "Would you like to use an existing model? (Y/n)"
     read -r use_existing_model
 
     if [[ "$use_existing_model" == "Y" || "$use_existing_model" == "y" ]]; then
-        echo -e "Enter the name of the model you want to use:"
-        read -r base_model
+        echo -e "Enter the number corresponding to the model you want to use:"
+        read -r model_choice
+
+        if [[ "$model_choice" =~ ^[0-9]+$ ]] && ((model_choice >= 1 && model_choice <= ${#available_models[@]})); then
+            base_model="${available_models[$((model_choice - 1))]}"
+        else
+            echo -e "${RED}Invalid choice. Exiting.${OFF}"
+            exit 1
+        fi
     else
         # Let user choose one of our models
         echo -e "Which AI model would you like to use? (1) ${GREEN}tinyllama${OFF} (fast) or (2) ${BLUE}deepseek-coder-v2${OFF} (better for coding)"

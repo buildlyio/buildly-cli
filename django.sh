@@ -127,7 +127,7 @@ setup_django_module() {
 
     if [[ "$generate_models" == "Y" || "$generate_models" == "y" ]]; then
         echo -e "${YELLOW}Generating model names from description...${OFF}"
-        model_names=$(ollama run "$tiny_model" "Generate a comma-separated list of database model names based on the following description: $module_description")
+        model_names=$(ollama run "$tiny_model" "Generate a comma-separated list of database model names using captial case Python syntax based on the following description: $module_description  do not generate or output anything but the comma seperated list in capital case.")
         echo -e "${GREEN}Generated model names: $model_names${OFF}"
     else
         echo -n "Enter the database model names (comma-separated, e.g., 'Customer,Invoice'): "
@@ -137,6 +137,10 @@ setup_django_module() {
     # Ask for project location
     local default_folder="$HOME/Projects"
     local project_folder=""
+
+    #Trim and clean model names
+    model_names=$(echo "$model_names" | tr -d '[:space:]' | tr ',' ' ')
+    model_names=$(echo "$model_names" | tr '[:upper:]' '[:lower:]')
 
     echo -e "${YELLOW}Where would you like to save this project?${OFF}"
     if [ -d "$default_folder" ]; then
@@ -170,20 +174,9 @@ setup_django_module() {
 
     echo -e "${GREEN}Django app folder detected: ${app_folder}${OFF}"
 
-    # Validate model names
-    if [ -z "$model_names" ]; then
-        echo -e "${RED}Error: No model names provided. Please provide valid model names.${OFF}"
-        exit 1
-    fi
-
-    if ! echo "$model_names" | grep -Eq '^[a-zA-Z0-9_,]+$'; then
-        echo -e "${RED}Error: Model names contain invalid characters. Only alphanumeric characters and commas are allowed.${OFF}"
-        exit 1
-    fi
-
     # Generate models using AI
     echo -e "${YELLOW}Generating models using AI...${OFF}"
-    ai_prompt="You are an expert Django developer following Buildly best practices. Generate Django models based on the following description and model names. Ensure the models are well-structured, include appropriate fields, and follow Django conventions. Description: $module_description. Model names: $model_names."
+    ai_prompt="You are an expert Django developer following Buildly best practices. Generate Django models based on the following description and model names. Ensure the models are well-structured, include appropriate fields, and follow Django conventions. Description: $module_description. Model names: $model_names.  Do not generate anything but the code."
 
     # Use the existing Ollama model to generate the models
     models_content=$(ollama run "$tiny_model" "$ai_prompt")
@@ -193,13 +186,16 @@ setup_django_module() {
         exit 1
     fi
 
-    # Write the generated models to models.py
+    # Remove unwanted "```python" and "```" from the models_content variable
+    models_content=$(echo "$models_content" | sed 's/^```python//;s/^```//;s/```$//')
+
+    # Write the cleaned models content to models.py
     echo "$models_content" > "$app_folder/models.py"
     echo -e "${GREEN}AI-generated models added to ${app_folder}/models.py${OFF}"
 
     # Generate serializers using AI
     echo -e "${YELLOW}Generating serializers using AI...${OFF}"
-    ai_prompt_serializers="You are an expert Django developer. Generate Django REST framework serializers for the following models. Ensure each serializer includes filters for all fields. Models: $models_content."
+    ai_prompt_serializers="You are an expert Django developer. Generate Django REST framework serializers for the following models. Ensure each serializer includes filters for all fields. Models: $models_content.  Do not generate or output anything but code."
 
     serializers_content=$(ollama run "$tiny_model" "$ai_prompt_serializers")
 
@@ -208,13 +204,16 @@ setup_django_module() {
         exit 1
     fi
 
+    # Remove unwanted "```python" and "```" from the serializers_content variable
+    serializers_content=$(echo "$serializers_content" | sed 's/^```python//;s/^```//;s/```$//')
+
     # Write the generated serializers to serializers.py
     echo "$serializers_content" > "$app_folder/serializers.py"
     echo -e "${GREEN}AI-generated serializers added to ${app_folder}/serializers.py${OFF}"
 
     # Generate views using AI
     echo -e "${YELLOW}Generating views using AI...${OFF}"
-    ai_prompt_views="You are an expert Django developer. Generate Django REST framework views (viewsets) for the following models. Ensure each viewset is properly configured for CRUD operations and integrates with the serializers. Models: $models_content."
+    ai_prompt_views="You are an expert Django developer. Generate Django REST framework views (viewsets) for the following models. Ensure each viewset is properly configured for CRUD operations and integrates with the serializers. Models: $models_content. Do not generate or output anything but code."
 
     views_content=$(ollama run "$tiny_model" "$ai_prompt_views")
 
@@ -223,126 +222,86 @@ setup_django_module() {
         exit 1
     fi
 
+    # Remove unwanted "```python" and "```" from the views_content variable
+    views_content=$(echo "$views_content" | sed 's/^```python//;s/^```//;s/```$//') 
+
     # Write the generated views to views.py
     echo "$views_content" > "$app_folder/views.py"
     echo -e "${GREEN}AI-generated views added to ${app_folder}/views.py${OFF}"
 
-    echo -e "${GREEN}Models added to ${app_folder}/models.py${OFF}"
+    # Update logic_service/urls.py with the new views
+    echo -e "${YELLOW}Updating logic_service/urls.py with the new views...${OFF}"
+    urls_file="$app_folder/urls.py"
 
-    # Generate requirements.txt
-    echo -e "${YELLOW}Creating requirements.txt...${OFF}"
-    cat > requirements.txt <<EOF
-Django
-djangorestframework
-drf-yasg
-EOF
+    # Generate URL patterns using AI
+    ai_prompt_urls="You are an expert Django developer. Update the Django REST framework router in the following urls.py file to use the newly generated class-based views. Replace any existing router URLs with the new views. Models: $models_content. Do not generate or output anything but code."
 
-    # Create `run.sh`
-    cat > run.sh <<EOF
-#!/bin/bash
-echo "Starting Django service..."
-python manage.py runserver 0.0.0.0:8000
-EOF
-    chmod +x run.sh
+    urls_content=$(ollama run "$tiny_model" "$ai_prompt_urls")
 
-    # Create Dockerfile
-    cat > Dockerfile <<EOF
-FROM python:3.9-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-CMD ["sh", "run.sh"]
-EOF
-
-    echo -e "${GREEN}Django module with API, Dockerfile, and run script created at: ${service_path}${OFF}"
-}
-
-# Function: Add AI-Generated API Endpoints (Optional)
-add_ai_generated_endpoints() {
-    echo -e "${YELLOW}Would you like AI to generate API endpoints? (Y/n)${OFF}"
-    read -r use_ai
-
-    PROMPT="$(cat buildly_ai_prompt.txt) 
-    You are an experienced Linux engineer with expertise in all Linux 
-    commands and their 
-    functionality across different Linux systems.  As well as a Django and Python engineer with experience in building RESTful APIs.
-
-    Your task is to generate Django REST framework viewsets and serializers for
-    models in $app_folder/models.py and make sure to remove any models or code
-    not related to $model_names models. Make sure to only output code and
-    nothing else.  Clean up any directories or Python files that isn't related
-    to $model_names in the current directory and subfolders by renaming those
-    files and directories. Ensure the folder structure and requirements.txt
-    file are up to date and work for generating an OpenAPI Swagger documented
-    set of endpoints for each model.
-
-    Output only the command as a single line of plain text, with no 
-    quotes, formatting, or additional commentary. Do not use markdown or any 
-    other formatting. Do not include the command into a code block.
-    Don't include the shell itself (bash, zsh, etc.) in the command.
-    "
-
-    if [[ "$use_ai" != "Y" && "$use_ai" != "y" ]]; then
-        echo -e "${YELLOW}Skipping AI-generated API endpoints.${OFF}"
-        return
-    fi
-
-    echo -e "${YELLOW}Generating AI-powered API endpoints...${OFF}"
-
-    # Locate Django app directory again
-    app_folder=$(find . -type f -name "models.py" | head -n 1 | xargs dirname)
-
-    if [ -z "$app_folder" ]; then
-        echo -e "${RED}Error: Could not find a valid Django app directory.${OFF}"
+    if [ -z "$urls_content" ]; then
+        echo -e "${RED}Error: Failed to generate URLs using AI.${OFF}"
         exit 1
     fi
 
-    (cd "$service_path" && ollama run "$tiny_model" "$PROMPT Generate Django REST framework viewsets and serializers for models in $app_folder/models.py and make sure to remove any models or code not related to $model_names models. Make sure to only output code and nothing else." > ai_output.tmp 2>&1) &
+    # Remove unwanted "```python" and "```" from the urls_content variable
+    urls_content=$(echo "$urls_content" | sed 's/^```python//;s/^```//;s/```$//')
 
-    # Wait for the first AI task to complete
-    local ai_pid=$!
-    wait $ai_pid
+    # Use the AI to Update README.md with new app description and guide on how to add new models, views and serializers to the service and how to connect them to the Buildly Core
+    readme_file="$service_path/README.md"
+    readme_content=$(ollama run "$tiny_model" "Update the README.md file with the following description: $module_description. Include a guide on how to add new models, views, and serializers to the service and how to connect them to the Buildly Core.")
+    if [ -z "$readme_content" ]; then
+        echo -e "${RED}Error: Failed to generate README.md content using AI.${OFF}"
+        exit 1
+    fi
+    # Remove unwanted "```python" and "```" from the readme_content variable
+    readme_content=$(echo "$readme_content" | sed 's/^```python//;s/^```//;s/```$//')
+    # Write the updated README.md content to the file
+    echo "$readme_content" > "$readme_file"
+    echo -e "${GREEN}Updated README.md with module description and guide on how to add new models, views, and serializers.${OFF}"
 
-    #CLEANUP DIRS
-        echo -e "🧹 ${CYAN}Generating AI-powered cleanup commands...${OFF}"
+    # Write the updated URLs to urls.py
+    echo "$urls_content" > "$urls_file"
+    echo -e "${GREEN}Updated URLs added to ${urls_file}${OFF}"
 
-    # AI prompt
-    PROMPT="You are a CLI assistant. Provide a list of Bash commands to automate file cleanup and organization for the given service. **Follow these rules strictly**:
+    echo -e "${GREEN}Django module with API, Dockerfile, and run script created at: ${service_path}${OFF}"
 
-    1. **Only output valid shell commands** – no explanations or markdown, just the commands.
-    2. **One command per line** – each line should be a complete Bash command ready to run.
-    3. **No placeholders or ambiguous syntax** – use actual file names/paths (based on context) instead of example or generic terms.
-    4. **Ensure proper safety** – use flags or patterns that prevent unintended deletions (e.g., avoid rm -rf without specific paths; include confirmations or restrictions as needed).
-    5. **Confine to the service directory** – operate only within the provided service’s folder (do not touch files outside the given directory structure).
-    6. **Use precise patterns** – if using glob or regex, make them specific to target only intended files.
+    echo -e "${YELLOW}What would you like to do next?${OFF}"
+    echo "1. Run the Django server"
+    echo "2. View the code in Visual Studio Code"
+    echo "3. Build another service"
+    echo "4. Exit"
 
-    _Remember:_ The output should contain nothing except the shell commands, each on its own line and be able to run in a Bash shell.
-    "
+    while true; do
+        read -r next_action
 
-    # Run Ollama in the background
-    ollama run "$tiny_model" "$PROMPT" > ai_commands.bash 2>&1 &
-    ai_pid=$!
-
-    # Show loading animation
-    loading_animation "Buster is organizing files..." &
-    anim_pid=$!
-
-    # Wait for Ollama to finish
-    wait $ai_pid
-
-    # Stop animation
-    kill $anim_pid &>/dev/null
-    wait $anim_pid 2>/dev/null
-
-    echo -e "${GREEN}✅ AI-generated cleanup commands ready for execution.${OFF}"
-
-    echo -e ai_commands.bash
-
-    echo -e "${GREEN}🎉 AI-driven cleanup completed!${OFF}"
-
-    # Clean up temporary files
-    rm -f ai_commands.tmp ai_commands_cleaned.tmp ai_commands_filtered.tmp
+        case "$next_action" in
+            1)
+                echo -e "${GREEN}Running Django server...${OFF}"
+                cd "$service_path" || exit
+                docker-compose up -d
+                loading_animation "Buster is starting the server..." 10
+                echo -e "${GREEN}Django server is running!${OFF}"
+                break
+                ;;
+            2)
+                echo -e "${GREEN}Opening the code in Visual Studio Code...${OFF}"
+                code "$service_path"
+                break
+                ;;
+            3)
+                echo -e "${GREEN}Restarting to build another service...${OFF}"
+                setup_django_module
+                break
+                ;;
+            4)
+                echo -e "${RED}Exiting...${OFF}"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Invalid choice! Please select a valid option.${OFF}"
+                ;;
+        esac
+    done
 }
 
 # **Main Script Execution**
@@ -358,7 +317,6 @@ while true; do
 
     if [[ "$user_choice" == "1" ]]; then
         setup_django_module
-        add_ai_generated_endpoints
         break
     elif [[ "$user_choice" == "2" ]]; then
         echo -e "${RED}Exiting...${OFF}"
