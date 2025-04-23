@@ -6,3 +6,5 @@ helm-charts
 .vscode
 .modelfile
 *.modelfile
+buildly-buildly-core
+buildly-react-template
