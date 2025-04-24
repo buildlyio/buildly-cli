@@ -160,22 +160,27 @@ setupBuildlyCore()
     kubectl apply -f buildly-core/k8s/service.yaml -n buildly-core
     echo "Buildly Core has been deployed to Minikube."
   elif [ "$deployment_choice" != "${deployment_choice#[Dd]}" ]; then
-    echo "Checking if Buildly Core is already running in Docker..."
-    if docker ps --filter "name=buildly-core" --filter "status=running" | grep -q "buildly-core"; then
-      echo "Buildly Core is already running in a Docker container."
-      echo "You can access it at: http://localhost:8080 or http://127.0.0.1:8080"
-    else
-      echo "Setting up Buildly Core in a Docker container..."
-      docker build -t buildly-core:latest buildly-core
-      if [ "$(docker ps -aq -f name=buildly-core)" ]; then
-        echo "A container named 'buildly-core' already exists. Removing it..."
-        docker rm -f buildly-core
-      fi
-      docker run -d --name buildly-core -p 8080:8080 buildly-core:latest
-
-      echo "Buildly Core is running in a Docker container and accessible at:"
-      echo "http://localhost:8080 or http://127.0.0.1:8080"
+    echo "Setting up Buildly Core using Docker Compose..."
+    if [ ! -f "buildly-core/docker-compose.yml" ]; then
+      echo "ERROR: docker-compose.yml file not found in the buildly-core directory."
+      return
     fi
+    (
+      cd buildly-core || exit
+      if type docker-compose >/dev/null 2>&1; then
+        docker-compose build
+        docker-compose up -d
+      elif type docker compose >/dev/null 2>&1; then
+        docker compose build
+        docker compose up -d
+      else
+        echo "ERROR: Neither 'docker-compose' nor 'docker compose' is installed or available in PATH."
+        exit 1
+      fi
+    )
+    echo "Buildly Core is running using Docker Compose and accessible at:"
+    echo "http://localhost:8080 or http://127.0.0.1:8080"
+
   else
     echo "Invalid choice. Please select either [M/m] for Minikube or [D/d] for Docker."
     return
