@@ -136,8 +136,16 @@ setupBuildlyCore()
   echo -n "${BOLD}${WHITE}Buildly Core configuration tool. Would you like to use Buildly Core inside Minikube for testing [M/m] or run it separately in a Docker container [D/d]? ${OFF}"
   read deployment_choice
 
-  echo "Cloning Buildly Core"
-  git clone "$github_url/$buildly_core_repo_path" "buildly-core"
+  if [ -d "buildly-core" ]; then
+    echo "Buildly Core already exists. Updating the repository..."
+    cd buildly-core || exit
+    git fetch origin
+    git pull origin $(git rev-parse --abbrev-ref HEAD)
+    cd ..
+  else
+    echo "Cloning Buildly Core"
+    git clone "$github_url/$buildly_core_repo_path" "buildly-core"
+  fi
 
   if [ "$deployment_choice" != "${deployment_choice#[Mm]}" ]; then
     echo "Setting up Buildly Core in Minikube..."
@@ -152,10 +160,22 @@ setupBuildlyCore()
     kubectl apply -f buildly-core/k8s/service.yaml -n buildly-core
     echo "Buildly Core has been deployed to Minikube."
   elif [ "$deployment_choice" != "${deployment_choice#[Dd]}" ]; then
-    echo "Setting up Buildly Core in a Docker container..."
-    docker build -t buildly-core:latest buildly-core
-    docker run -d --name buildly-core -p 8080:8080 buildly-core:latest
-    echo "Buildly Core is running in a Docker container on port 8080."
+    echo "Checking if Buildly Core is already running in Docker..."
+    if docker ps --filter "name=buildly-core" --filter "status=running" | grep -q "buildly-core"; then
+      echo "Buildly Core is already running in a Docker container."
+      echo "You can access it at: http://localhost:8080 or http://127.0.0.1:8080"
+    else
+      echo "Setting up Buildly Core in a Docker container..."
+      docker build -t buildly-core:latest buildly-core
+      if [ "$(docker ps -aq -f name=buildly-core)" ]; then
+        echo "A container named 'buildly-core' already exists. Removing it..."
+        docker rm -f buildly-core
+      fi
+      docker run -d --name buildly-core -p 8080:8080 buildly-core:latest
+
+      echo "Buildly Core is running in a Docker container and accessible at:"
+      echo "http://localhost:8080 or http://127.0.0.1:8080"
+    fi
   else
     echo "Invalid choice. Please select either [M/m] for Minikube or [D/d] for Docker."
     return
@@ -252,8 +272,46 @@ cloneMktpService()
   git clone "$github_url/$buildly_mkt_path/$1.git" "YourApplication/services/$1";
 }
 
+# setup or request the project directory from the user and set it as the working directory until the script ends then 
+# change back to the original working directory
+setupProjectDirectory()
+{
+  # Check if the project directory is set
+  if [ -z "$project_directory" ]; then
+    # Prompt the user for the project directory or use a default
+    read -p "Enter the path to your project directory (or press Enter to use the default '/home/glind/Projects/buildly/default-project'): " project_directory
+    project_directory=${project_directory:-/home/glind/Projects/}
+  fi
+
+  # Check if the directory exists, if not, create it
+  if [ ! -d "$project_directory" ]; then
+    echo "The directory '$project_directory' does not exist. Creating it now..."
+    mkdir -p "$project_directory"
+  fi
+
+  # Change to the project directory
+  cd "$project_directory" || exit
+  echo "Working directory set to: $project_directory"
+}
+
+
 # Display the menu
 showMenu() {
+  # Set the terminal colors
+  BOLD=$(tput bold)
+  WHITE=$(tput setaf 7)
+  OFF=$(tput sgr0)
+  if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+      clear
+  else
+      echo -e "${YELLOW}Script is sourced; skipping screen clear.${OFF}"
+  fi
+  echo -e "${BOLD}${CYAN}"
+  echo "    /\_/\   "
+  echo "   ( o.o )  Buildly Developer Helper"
+  echo "    > ^ <   "
+  echo -e "${YELLOW}    Buildly.io - Build Smarter, Not Harder${OFF}"
+  echo ""
   echo "Welcome to the Buildly CLI Tool!"
   echo "Please select an option:"
   echo "1) Set up Minikube"
@@ -269,6 +327,7 @@ showMenu() {
 # Main script logic
 while true; do
   showMenu
+  setupProjectDirectory
   read -p "Enter your choice: " choice
   case $choice in
     1)
