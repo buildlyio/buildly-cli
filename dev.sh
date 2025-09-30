@@ -230,14 +230,53 @@ setupBuildlyTemplate()
   fi
 }
 
+# method to set up BabbleBeaver AI framework
+setupBabbleBeaver()
+{
+  echo -n "${BOLD}${WHITE}Would you like to set up BabbleBeaver, our AI and LLM framework? Yes [Y/y] or No [N/n] ${OFF}"
+  read setup_babblebeaver
+
+  if [ "$setup_babblebeaver" != "${setup_babblebeaver#[Yy]}" ]; then
+    echo "Cloning BabbleBeaver repository..."
+    git clone "https://github.com/open-build/BabbleBeaver" "BabbleBeaver"
+
+    echo -n "${BOLD}${WHITE}Would you like to configure BabbleBeaver with OpenAI [O/o] or Gemini [G/g]? ${OFF}"
+    read ai_choice
+
+    if [ "$ai_choice" != "${ai_choice#[Oo]}" ]; then
+      echo "Configuring BabbleBeaver for OpenAI..."
+      # Example configuration for OpenAI
+      cp BabbleBeaver/config/openai.example.yaml BabbleBeaver/config/openai.yaml
+      echo "Please add your OpenAI API key to BabbleBeaver/config/openai.yaml."
+    elif [ "$ai_choice" != "${ai_choice#[Gg]}" ]; then
+      echo "Configuring BabbleBeaver for Gemini..."
+      # Example configuration for Gemini
+      cp BabbleBeaver/config/gemini.example.yaml BabbleBeaver/config/gemini.yaml
+      echo "Please add your Gemini API key to BabbleBeaver/config/gemini.yaml."
+    else
+      echo "Invalid choice. Skipping AI configuration."
+    fi
+
+    echo "Integrating BabbleBeaver with Buildly Core and microservices..."
+    # Example integration instructions
+    echo "To connect BabbleBeaver to your Buildly Core modules, follow these steps:"
+    echo "1. Add BabbleBeaver's API endpoint to your Buildly Core configuration."
+    echo "2. Use BabbleBeaver's SDK to implement AI logic in your services."
+    echo "3. Refer to the BabbleBeaver documentation for advanced integration options."
+
+    echo "BabbleBeaver setup is complete."
+  else
+    echo "Skipping BabbleBeaver setup."
+  fi
+}
+
+# Modify the setupServices function to prompt for BabbleBeaver integration
 setupServices()
 {
-  # Check specific dependencies
   type docker >/dev/null 2>&1 || { echo >&2 "ERROR: You do not have 'Docker' installed.
   Check the documentation of how to install it: https://docs.docker.com/v17.12/install/"; exit 1; }
 
   eval $(minikube docker-env)
-  # check if service folder exists inside of application's folder
   if [ ! -d YourApplication/services ]; then
     MSG="The application folder \"YourApplication/services\" doesn't exist"
     print_message "error" "$MSG"
@@ -245,15 +284,20 @@ setupServices()
 
   (
   cd "YourApplication/services" || return
-  # loop through all services and build their images
   find . -mindepth 1 -maxdepth 1 -type d | while IFS= read -r service
   do
     (
     cd $service || exit
     cleanedService=$(echo "$service" | tr "[:punct:]" -)
-    # build a local image
     docker build . -t "${cleanedService}:latest" || exit
     )
+    echo -n "${BOLD}${WHITE}Would you like to integrate BabbleBeaver AI logic into the $service service? Yes [Y/y] or No [N/n] ${OFF}"
+    read integrate_babblebeaver
+    if [ "$integrate_babblebeaver" != "${integrate_babblebeaver#[Yy]}" ]; then
+      echo "Integrating BabbleBeaver into $service..."
+      # Example integration logic
+      echo "Refer to BabbleBeaver's SDK documentation to implement AI logic in $service."
+    fi
   done
   )
 }
@@ -283,9 +327,10 @@ setupProjectDirectory()
 {
   # Check if the project directory is set
   if [ -z "$project_directory" ]; then
-    # Prompt the user for the project directory or use a default
-    read -p "Enter the path to your project directory (or press Enter to use the default '/home/glind/Projects/buildly/default-project'): " project_directory
-    project_directory=${project_directory:-/home/glind/Projects/}
+    # Detect the current user's home directory and set the default project directory
+    default_directory="$HOME/Projects"
+    read -p "Enter the path to your project directory (or press Enter to use the default '$default_directory'): " project_directory
+    project_directory=${project_directory:-$default_directory}
   fi
 
   # Check if the directory exists, if not, create it
@@ -326,7 +371,8 @@ showMenu() {
   echo "5) Set up Services"
   echo "6) List Buildly Marketplace Services"
   echo "7) Clone a Buildly Marketplace Service"
-  echo "8) Exit"
+  echo "8) Set up BabbleBeaver AI Framework"
+  echo "9) Exit"
 }
 
 # Main script logic
@@ -358,6 +404,9 @@ while true; do
       cloneMktpService "$service_name"
       ;;
     8)
+      setupBabbleBeaver
+      ;;
+    9)
       echo "Exiting the Buildly CLI Tool. Goodbye!"
       exit 0
       ;;
