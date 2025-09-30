@@ -3,10 +3,16 @@
 Command line tool for creating and configuring your Buildly Logic Modules and to setup your Dev Encrionment.
 Also Buildy Helper AI, to help answer anyquestions and guide you in configuring your services, and deploying them.
 
-Check the Community!
-https://collab.buildly.io and get started contributing to the Open Source projects
-
 ![Buildly CLI --help](images/cli-help.png)
+
+## Community & Support
+
+Join our vibrant community to get help, share ideas, and collaborate with other developers:
+
+🎮 **[Discord Server](https://discord.com/channels/908423956908896386/908424004916895804)** - Real-time discussions, support, and community engagement  
+🤝 **[Buildly Collaboration Platform](https://collab.buildly.io)** - Find technical co-founders, resources, and contribute to open source projects
+
+Whether you're looking for technical support, want to contribute to open source projects, or seeking to connect with potential co-founders, our community platforms are the perfect place to start!
 
 ## Getting Started
 
